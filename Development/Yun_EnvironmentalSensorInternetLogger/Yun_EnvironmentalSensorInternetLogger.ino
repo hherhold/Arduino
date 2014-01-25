@@ -25,16 +25,19 @@
 #include <SoftwareSerial.h>
 #include <XBee.h>
 
+// Measurement types. These must match values in the database tables.
+#define MEAS_TYPE_TEMP_C                 1
+#define MEAS_TYPE_TEMP_F                 2
+#define MEAS_TYPE_BAROMETRIC_PRESS_MBAR  3
+#define MEAS_TYPE_HUMIDITY               4
+
 XBee xbee = XBee();
-ZBRxIoSampleResponse ioSample = ZBRxIoSampleResponse();
 
 SoftwareSerial mySerial( 10, 11 ); // rx, tx
 
 void sendMeasurementToDatabase( String radio_mac, int measurementType, float value );
 
 #define USE_DEBUG_CONSOLE
-
-HttpClient myClient;
 
 void setup() {
   // put your setup code here, to run once:
@@ -50,17 +53,12 @@ void setup() {
   Console.println( "You're connected to the console!" );
 }
 
-// Only send every 5 samples.
-int decimationCounter = 5;
-
 void loop() {
   //attempt to read a packet    
   xbee.readPacket();
 
   if (xbee.getResponse().isAvailable())
   {
-    // got something
-    
     if (xbee.getResponse().getApiId() == AT_RESPONSE )
     {
       RemoteAtCommandResponse atCmdResponse;
@@ -76,6 +74,7 @@ void loop() {
     
     else if (xbee.getResponse().getApiId() == ZB_IO_SAMPLE_RESPONSE)
     {
+      ZBRxIoSampleResponse ioSample = ZBRxIoSampleResponse();
       xbee.getResponse().getZBRxIoSampleResponse(ioSample);
 
       Console.print("Received I/O Sample from: ");
@@ -89,7 +88,6 @@ void loop() {
           String( ioSample.getRemoteAddress64().getLsb(), HEX );
       radioMac.toUpperCase();
                         
-                        
       if (ioSample.containsAnalog()) {
         Console.println("Sample contains analog data");
         Console.println( "Grabbing analog sample." );
@@ -97,15 +95,8 @@ void loop() {
         {
           float temperatureCelsius = 
             ( ( (ioSample.getAnalog(0) / 1023.0 ) * 1.2 ) - 0.5 ) * 100.0;
-          
-          decimationCounter--;
-          if ( decimationCounter <= 0 )
-          {
-            Console.println( "Sending to DB!" );
-            sendMeasurementToDatabase( radioMac, 1, temperatureCelsius );
-            decimationCounter = 5;
-          }
-       }
+	  sendMeasurementToDatabase( radioMac, MEAS_TYPE_TEMP_C, temperatureCelsius );
+        }
       }
       else
       {
@@ -120,23 +111,11 @@ void loop() {
     Console.print("Error reading packet.  Error code: ");  
     Console.println(xbee.getResponse().getErrorCode());
   }
-
-
-
-#if 0  
-  while ( mySerial.available() > 0 )
-  {
-    Console.println( mySerial.read(), HEX );
-  }
-#endif
-  
-//  delay( 200 );
 }
-
-// Format: http://www.fafoh.com/dbinsert.php?location=1&type=1&value=70.0
 
 void sendMeasurementToDatabase( String radio_mac, int measurementType, float value )
 {
+  HttpClient client;
   String url = "http://www.fafoh.com/dbinsert.php?radio_mac=";
   url += radio_mac;
   url += "&type=";
@@ -146,8 +125,7 @@ void sendMeasurementToDatabase( String radio_mac, int measurementType, float val
   
   // The result of the get isn't used. Data is being sent to the server to be
   // logged and any response from the server is ignored.
-  myClient.get( url );
-  
+  client.get( url );
 }
 
 

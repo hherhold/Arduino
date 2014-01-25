@@ -1,0 +1,10 @@
+XBee Radio ID numbers
+
+
+Coord  ID = 00 13 A2 00 40 61 B0 68   (Wire antenna)
+Router ID = 00 13 A2 00 40 89 16 20   (Wire antenna)
+
+Ceramic 1 = 00 13 A2 00 40 86 BC A1
+Ceramic 2 = 00 13 A2 00 40 86 BD 0A
+
+

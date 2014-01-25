@@ -1029,7 +1029,7 @@ XBeeAddress64::XBeeAddress64(uint32_t msb, uint32_t lsb) : XBeeAddress() {
 	_lsb = lsb;
 }
 
-uint32_t XBeeAddress64::getMsb() {
+uint32_t XBeeAddress64::getMsb() const {
 	return _msb;
 }
 
@@ -1037,7 +1037,7 @@ void XBeeAddress64::setMsb(uint32_t msb) {
 	_msb = msb;
 }
 
-uint32_t XBeeAddress64::getLsb() {
+uint32_t XBeeAddress64::getLsb() const {
 	return _lsb;
 }
 

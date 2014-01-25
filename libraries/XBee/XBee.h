@@ -297,14 +297,26 @@ class XBeeAddress64 : public XBeeAddress {
 public:
 	XBeeAddress64(uint32_t msb, uint32_t lsb);
 	XBeeAddress64();
-	uint32_t getMsb();
-	uint32_t getLsb();
+	uint32_t getMsb() const;
+	uint32_t getLsb() const;
 	void setMsb(uint32_t msb);
 	void setLsb(uint32_t lsb);
 private:
 	uint32_t _msb;
 	uint32_t _lsb;
 };
+
+inline bool operator==(const XBeeAddress64& lhs, const XBeeAddress64& rhs)
+{
+  return (( lhs.getMsb() == rhs.getMsb() ) && 
+	  ( lhs.getLsb() == rhs.getLsb() ));
+}
+
+inline bool operator!=(const XBeeAddress64& lhs, const XBeeAddress64& rhs)
+{
+  return !operator==(lhs,rhs);
+}
+
 
 //class XBeeAddress16 : public XBeeAddress {
 //public:

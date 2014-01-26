@@ -59,7 +59,7 @@ void setup()
 
 // The nodes only send sensor data when sampled by the app. 
 
-#define LOOP_PERIOD_IN_SEC 5
+#define LOOP_PERIOD_IN_SEC 1
 
 bool discoveryRun = false;
 
@@ -67,10 +67,17 @@ void loop()
 {
     if ( discoveryRun == false ) 
     {
+#ifdef USE_DEBUG_CONSOLE
+	Console.println( "Sending out ND request!" );
+#endif
 	// Need to send out ATND command to get all nodes to reply with
 	// their info.
 	uint8_t ndCmd[] = {'N','D'};
-	AtCommandRequest ndRequest = AtCommandRequest( ndCmd );
+	XBeeAddress64 broadcastAddress = XBeeAddress64( 0x00000000, 0x0000ffff );
+
+	// The 0, 0 at the end is no value associated with this command.
+	RemoteAtCommandRequest ndRequest = 
+	    RemoteAtCommandRequest( broadcastAddress, ndCmd, 0, 0 );
 	xbee.send( ndRequest );
 	discoveryRun = true;
     }
@@ -80,12 +87,12 @@ void loop()
 	
 	if (xbee.getResponse().isAvailable())
 	{
-	    if (xbee.getResponse().getApiId() == AT_RESPONSE )
+	    if (xbee.getResponse().getApiId() == REMOTE_AT_COMMAND_RESPONSE )
 	    {
 		RemoteAtCommandResponse atCmdResponse;
 		xbee.getResponse().getRemoteAtCommandResponse( atCmdResponse );
 #ifdef USE_DEBUG_CONSOLE		
-		Console.print( "Received AT response from:" );
+		Console.print( "Received Remote AT response from:" );
 		Console.print( atCmdResponse.getRemoteAddress64().getMsb(), HEX );
 		Console.println( atCmdResponse.getRemoteAddress64().getLsb(), HEX );
 #endif
@@ -140,7 +147,7 @@ void loop()
 #endif
 	}
 
-	delay( LOOP_PERIOD_IN_SEC * 1000 );
+	delay( 100 );
     }
 }
 

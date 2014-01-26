@@ -57,10 +57,6 @@ void setup()
 #endif
 }
 
-// The nodes only send sensor data when sampled by the app. 
-
-#define LOOP_PERIOD_IN_SEC 1
-
 bool discoveryRun = false;
 
 void loop() 

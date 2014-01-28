@@ -40,6 +40,25 @@ SoftwareSerial mySerial( 10, 11 ); // rx, tx
 
 void sendMeasurementToDatabase( String radio_mac, int measurementType, float value );
 
+inline uint32_t pack4bytes( uint8_t* value )
+{
+    uint32_t retval = 0;
+    retval  = (( uint32_t )(value[ 0 ])) << 24;
+    retval |= (( uint32_t )(value[ 1 ])) << 16;
+    retval |= (( uint32_t )(value[ 2 ])) << 8;
+    retval |= value[ 3 ];
+    return retval;
+}
+
+
+enum LoggerState
+{
+    LS_INIT = 0,
+    LS_COORDINATOR_FOUND,
+    LS_LOGGING
+};
+
+LoggerState currentLoggerState = LS_INIT;
 
 void setup() 
 {
@@ -57,63 +76,101 @@ void setup()
 #endif
 }
 
-bool discoveryRun = false;
+XBeeAddress64 coordinatorAddress64 = XBeeAddress64( 0, 0 );
+
+// During the initialization process, we need synchronized communication,
+// meaning a request is sent and a reply is required before proceeding with
+// sending another request. This flag is used to denote that a request has been
+// sent and a reply is expected.
+// Once init is complete, this flag is not used. It's only for setup where
+// queries are sent for IDs that need more than one packet to process (64 bit
+// IDs, for example).
+bool requestInTransit = false;
+
+void handleSending( );
 
 void loop() 
 {
-    if ( discoveryRun == false ) 
-    {
-#ifdef USE_DEBUG_CONSOLE
-	Console.println( "Sending out ND request!" );
-#endif
-	// Need to send out ATND command to get all nodes to reply with
-	// their info.
-	uint8_t ndCmd[] = {'N','D'};
-	XBeeAddress64 broadcastAddress = XBeeAddress64( 0x00000000, 0x0000ffff );
+    handleSending( );
 
-	// The 0, 0 at the end is no value associated with this command.
-	RemoteAtCommandRequest ndRequest = 
-	    RemoteAtCommandRequest( broadcastAddress, ndCmd, 0, 0 );
-	xbee.send( ndRequest );
-	discoveryRun = true;
-    }
-    else
-    {
-	xbee.readPacket();
+    xbee.readPacket();
 	
-	if (xbee.getResponse().isAvailable())
+    if (xbee.getResponse().isAvailable())
+    {
+	if ( xbee.getResponse().isError() )
 	{
-	    if (xbee.getResponse().getApiId() == REMOTE_AT_COMMAND_RESPONSE )
+	    Console.print( "Received packet with error status 0x" );
+	    Console.println( xbee.getResponse().getErrorCode() );
+	}
+
+	requestInTransit = false;
+	if ( currentLoggerState == LS_INIT )
+	{
+	    if (xbee.getResponse().getApiId() == AT_COMMAND_RESPONSE )
+	    {
+		AtCommandResponse atCmdResponse;
+		xbee.getResponse().getAtCommandResponse( atCmdResponse );
+
+		uint8_t* cmd = atCmdResponse.getCommand();
+		uint8_t* value = atCmdResponse.getValue();
+		// SH?
+		if ( ( cmd[0] == 'S' ) && ( cmd[1] == 'H' ))
+		{
+		    coordinatorAddress64.setMsb( pack4bytes( value ) );
+		}
+		else if ( ( cmd[0] == 'S' ) && ( cmd[1] == 'L' ))
+		{
+		    coordinatorAddress64.setLsb( pack4bytes( value ) );
+		    currentLoggerState = LS_LOGGING;
+		    Console.println( "Going to LS_LOGGING." );
+
+		    // At this point we no longer need the request in transit flag
+		    // as any replies we receive from now on are wholly contained
+		    // in one packet. We needed it for the serial number (above) for
+		    // the coordinator as the high bytes and low bytes were sent in
+		    // two separate packets.
+		}
+	    }
+	}
+	else if ( currentLoggerState == LS_LOGGING )
+	{
+	    if ( xbee.getResponse().getApiId() == AT_COMMAND_RESPONSE )
+	    {
+		AtCommandResponse atCommandResponse;
+		xbee.getResponse().getAtCommandResponse( atCommandResponse );
+		uint8_t* cmd = atCommandResponse.getCommand();
+		Console.print( "Received AT_COMMAND_RESPONSE " );
+		Console.print( (char)(cmd[0]) );
+		Console.println( (char)(cmd[1]) );
+	    }
+	    else if (xbee.getResponse().getApiId() == REMOTE_AT_COMMAND_RESPONSE )
 	    {
 		RemoteAtCommandResponse atCmdResponse;
 		xbee.getResponse().getRemoteAtCommandResponse( atCmdResponse );
-#ifdef USE_DEBUG_CONSOLE		
+		Console.print( "Received REMOTE_AT_COMMAND_RESPONSE " );
+		uint8_t* cmd = atCmdResponse.getCommand();
+		Console.print( (char)(cmd[0]) );
+		Console.println( (char)(cmd[1]) );
 		Console.print( "Received Remote AT response from:" );
 		Console.print( atCmdResponse.getRemoteAddress64().getMsb(), HEX );
 		Console.println( atCmdResponse.getRemoteAddress64().getLsb(), HEX );
-#endif
 	    }
     
 	    else if (xbee.getResponse().getApiId() == ZB_IO_SAMPLE_RESPONSE)
 	    {
 		ZBRxIoSampleResponse ioSample = ZBRxIoSampleResponse();
 		xbee.getResponse().getZBRxIoSampleResponse(ioSample);
-#ifdef USE_DEBUG_CONSOLE
 		Console.print("Received I/O Sample from: ");
 		Console.print(ioSample.getRemoteAddress64().getMsb(), HEX);  
 		Console.println(ioSample.getRemoteAddress64().getLsb(), HEX);  
-#endif
-      
 		String radioMac = 
 		    String( ioSample.getRemoteAddress64().getMsb(), HEX ) +
 		    String( ioSample.getRemoteAddress64().getLsb(), HEX );
 		radioMac.toUpperCase();
                         
 		if (ioSample.containsAnalog()) {
-#ifdef USE_DEBUG_CONSOLE
 		    Console.println("Sample contains analog data");
 		    Console.println( "Grabbing analog sample." );
-#endif
 		    if ( ioSample.isAnalogEnabled( 0 ) )
 		    {
 			float temperatureCelsius = 
@@ -125,27 +182,71 @@ void loop()
 		}
 		else
 		{
-#ifdef USE_DEBUG_CONSOLE
 		    Console.println( "Expected analog data in this packet!" );
-#endif
 		}
 	    } 
 	    else {
-#ifdef USE_DEBUG_CONSOLE
 		Console.print("Expected I/O Sample, but got ");
 		Console.print(xbee.getResponse().getApiId(), HEX);
-#endif
 	    }    
 	} else if (xbee.getResponse().isError()) {
-#ifdef USE_DEBUG_CONSOLE
 	    Console.print("Error reading packet.  Error code: ");  
 	    Console.println(xbee.getResponse().getErrorCode());
-#endif
 	}
+    }
 
-	delay( 100 );
+    delay( 100 );
+}
+
+void handleSending( )
+{
+    // Do we need to send any requests?
+
+    // Case 1 - We don't know the coordinator ID. Send out a two-part
+    // request for the local radio's serial number. The requestInTransit
+    // flag is needed for this two-part request.
+    if ( ( currentLoggerState == LS_INIT ) && ( requestInTransit == false ) )
+    {
+	if ( ( coordinatorAddress64.getMsb() == 0 ) &&
+	     ( coordinatorAddress64.getLsb() == 0 ) )
+	{
+	    // First find coordinator ID. Use OP to get operating ID.
+	    Console.println( "Sending out SH request!" );
+	    uint8_t cmd[] = {'S','H'};
+	    AtCommandRequest request = AtCommandRequest( cmd );
+	    xbee.send( request );
+	    requestInTransit = true;
+	}
+	else if ( ( coordinatorAddress64.getMsb() != 0 ) &&
+		  ( coordinatorAddress64.getLsb() == 0 ) )
+	{
+	    // Half of the coordinator ID has been recieved. 
+	    // Request the other half.
+	    uint8_t cmd[] = {'S','L'};
+	    AtCommandRequest request = AtCommandRequest( cmd );
+	    xbee.send( request );
+	    requestInTransit = true;
+	}
+    }
+
+    // Normal (logging) operation.
+    else if ( currentLoggerState == LS_LOGGING )
+    {
+	// Do we need to discover the other radios in the network?
+	Console.println( "Sending out ND request!" );
+	// Need to send out ATND command to get all nodes to reply with
+	// their info.
+	uint8_t ndCmd[] = {'N','D'};
+	XBeeAddress64 broadcastAddress = XBeeAddress64( 0x00000000, 0x0000ffff );
+
+	// The 0, 0 at the end is no value associated with this command.
+	RemoteAtCommandRequest ndRequest = 
+	    RemoteAtCommandRequest( broadcastAddress, ndCmd, 0, 0 );
+	xbee.send( ndRequest );
     }
 }
+
+
 
 void sendMeasurementToDatabase( String radio_mac, int measurementType, float value )
 {

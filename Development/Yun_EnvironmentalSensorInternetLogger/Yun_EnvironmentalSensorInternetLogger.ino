@@ -11,13 +11,6 @@
  * sensors that use I2C or SPI will require use of a PIC like Arduino.
  */
 
-/*
- * To do:
- * 1. Send data to fafoh.com via HTML request over Bridge interface.
- * 2. Figure out how to tell XBee sensors to sleep inbetween reads.
- * 3. Determine sample period. 1 minute for starters.
- */
-
 #define USE_DEBUG_CONSOLE
 #ifdef USE_DEBUG_CONSOLE
 #include <Console.h>
@@ -58,6 +51,10 @@ enum LoggerState
     LS_LOGGING
 };
 
+#define MAX_SENSOR_NODES 8
+XBeeAddress64 sensorNodeList[ MAX_SENSOR_NODES ];
+int numSensorNodes = 0;
+
 LoggerState currentLoggerState = LS_INIT;
 
 void setup() 
@@ -68,6 +65,12 @@ void setup()
 #endif
   xbee.setSerial( mySerial );
   mySerial.begin( 9600 );
+
+  for ( int i = 0; i < MAX_SENSOR_NODES; i++ )
+  {
+      sensorNodeList[ i ].setMsb( 0 );
+      sensorNodeList[ i ].setLsb( 0 );
+  }
   
 #ifdef USE_DEBUG_CONSOLE
   while (!Console ) { ; }
@@ -154,6 +157,13 @@ void loop()
 		Console.print( "Received Remote AT response from:" );
 		Console.print( atCmdResponse.getRemoteAddress64().getMsb(), HEX );
 		Console.println( atCmdResponse.getRemoteAddress64().getLsb(), HEX );
+		if (( cmd[0] == 'N' ) && ( cmd[1] == 'D' ))
+		{
+		    if ( atCmdResponse.getRemoteAddress64() != coordinatorAddress64 )
+		    {
+			addAddressToNodeList( atCmdResponse.getRemoteAddress64() );
+		    }
+		}
 	    }
     
 	    else if (xbee.getResponse().getApiId() == ZB_IO_SAMPLE_RESPONSE)
@@ -198,6 +208,8 @@ void loop()
     delay( 100 );
 }
 
+bool ndSent = false;
+
 void handleSending( )
 {
     // Do we need to send any requests?
@@ -232,21 +244,41 @@ void handleSending( )
     // Normal (logging) operation.
     else if ( currentLoggerState == LS_LOGGING )
     {
-	// Do we need to discover the other radios in the network?
-	Console.println( "Sending out ND request!" );
-	// Need to send out ATND command to get all nodes to reply with
-	// their info.
-	uint8_t ndCmd[] = {'N','D'};
-	XBeeAddress64 broadcastAddress = XBeeAddress64( 0x00000000, 0x0000ffff );
+	if ( ( numSensorNodes == 0 ) && ( ndSent == false ) )
+	{
+	    // Do we need to discover the other radios in the network?
+	    Console.println( "Sending out ND request!" );
+	    // Need to send out ATND command to get all nodes to reply with
+	    // their info.
+	    uint8_t ndCmd[] = {'N','D'};
+	    XBeeAddress64 broadcastAddress = XBeeAddress64( 0x00000000, 0x0000ffff );
 
-	// The 0, 0 at the end is no value associated with this command.
-	RemoteAtCommandRequest ndRequest = 
-	    RemoteAtCommandRequest( broadcastAddress, ndCmd, 0, 0 );
-	xbee.send( ndRequest );
+	    // The 0, 0 at the end is no value associated with this command.
+	    RemoteAtCommandRequest ndRequest = 
+		RemoteAtCommandRequest( broadcastAddress, ndCmd, 0, 0 );
+	    xbee.send( ndRequest );
+	    ndSent = true;
+	}
+	else
+	{
+	    Console.print( numSensorNodes );
+	}
     }
 }
 
-
+void addAddressToNodeList( XBeeAddress64& newAddress )
+{
+    for ( int i = 0; i < numSensorNodes; i++ )
+    {
+	if ( newAddress == sensorNodeList[ i ] )
+	{
+	    return;
+	}
+    }
+    sensorNodeList[ numSensorNodes ].setMsb( newAddress.getMsb() );
+    sensorNodeList[ numSensorNodes ].setLsb( newAddress.getLsb() );
+    numSensorNodes++;
+}
 
 void sendMeasurementToDatabase( String radio_mac, int measurementType, float value )
 {
@@ -262,8 +294,3 @@ void sendMeasurementToDatabase( String radio_mac, int measurementType, float val
     // logged and any response from the server is ignored.
     client.get( url );
 }
-
-
-
-
-

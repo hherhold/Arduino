@@ -155,14 +155,31 @@ void loop()
 		Console.print( (char)(cmd[0]) );
 		Console.println( (char)(cmd[1]) );
 		Console.print( "Received Remote AT response from:" );
-		Console.print( atCmdResponse.getRemoteAddress64().getMsb(), HEX );
-		Console.println( atCmdResponse.getRemoteAddress64().getLsb(), HEX );
+		String radioMac = 
+		    String( atCmdResponse.getRemoteAddress64().getMsb(), HEX ) +
+		    String( atCmdResponse.getRemoteAddress64().getLsb(), HEX );
+		radioMac.toUpperCase();
+		Console.println( radioMac );
 		if (( cmd[0] == 'N' ) && ( cmd[1] == 'D' ))
 		{
 		    if ( atCmdResponse.getRemoteAddress64() != coordinatorAddress64 )
 		    {
 			addAddressToNodeList( atCmdResponse.getRemoteAddress64() );
 		    }
+		}
+		if (( cmd[0] == 'I' ) && ( cmd[1] == 'S' ))
+		{
+		    uint8_t* data = atCmdResponse.getValue();
+		    uint32_t value = ((uint32_t)(data[ 4 ])) << 8;
+		    value |= ((uint32_t)(data[ 5 ]));
+		    float temperatureCelsius = 
+			( ( (value / 1023.0 ) * 1.2 ) - 0.5 ) * 100.0;
+		    Console.print( "Logging temperature: " );
+		    Console.println( temperatureCelsius );
+		    sendMeasurementToDatabase( radioMac, 
+					       MEAS_TYPE_TEMP_C, 
+					       temperatureCelsius );
+
 		}
 	    }
     
@@ -185,6 +202,8 @@ void loop()
 		    {
 			float temperatureCelsius = 
 			    ( ( (ioSample.getAnalog(0) / 1023.0 ) * 1.2 ) - 0.5 ) * 100.0;
+			Console.print( "Logging temperature: " );
+			Console.println( temperatureCelsius );
 			sendMeasurementToDatabase( radioMac, 
 						   MEAS_TYPE_TEMP_C, 
 						   temperatureCelsius );
@@ -210,10 +229,11 @@ void loop()
 
 bool ndSent = false;
 
+unsigned long delayTimerMillis = 0;
+
 void handleSending( )
 {
     // Do we need to send any requests?
-
     // Case 1 - We don't know the coordinator ID. Send out a two-part
     // request for the local radio's serial number. The requestInTransit
     // flag is needed for this two-part request.
@@ -261,7 +281,28 @@ void handleSending( )
 	}
 	else
 	{
+	    // Logging "steady-state".
+	    if ( ( millis() - delayTimerMillis ) > 10000 )
+	    {
+		// Time to request sensor data.
+		for ( int i = 0; i < numSensorNodes; i++ )
+		{
+		    uint8_t cmd[] = {'I','S'};
+
+		    // The 0, 0 at the end is no value associated with this command.
+		    RemoteAtCommandRequest request = 
+			RemoteAtCommandRequest( sensorNodeList[ i ], cmd, 0, 0 );
+		    xbee.send( request );
+		}
+		delayTimerMillis = millis();
+		Console.print( "X" );
+		if ( numSensorNodes == 0 )
+		{
+		    ndSent = false;
+		}
+	    }
 	    Console.print( numSensorNodes );
+	    
 	}
     }
 }

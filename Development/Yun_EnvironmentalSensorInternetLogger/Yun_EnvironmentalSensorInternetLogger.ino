@@ -11,6 +11,14 @@
  * sensors that use I2C or SPI will require use of a PIC like Arduino.
  */
 
+#ifdef ARDUINO_AVR_YUN
+
+#endif
+
+#ifdef ARDUINO_AVR_MEGA2560
+#define FOO 2
+#endif
+
 #define USE_DEBUG_CONSOLE
 #ifdef USE_DEBUG_CONSOLE
 #include <Console.h>
@@ -91,6 +99,8 @@ XBeeAddress64 coordinatorAddress64 = XBeeAddress64( 0, 0 );
 bool requestInTransit = false;
 
 void handleSending( );
+void handleNetworkDiscoveryResponse( uint8_t* data, int length );
+void addAddressToNodeList( uint32_t serialHigh, uint32_t serialLow );
 
 void loop() 
 {
@@ -105,6 +115,8 @@ void loop()
 	    Console.print( "Received packet with error status 0x" );
 	    Console.println( xbee.getResponse().getErrorCode() );
 	}
+	Console.print( "Packet available. API ID = 0x" );
+	Console.println( xbee.getResponse().getApiId(), HEX );
 
 	requestInTransit = false;
 	if ( currentLoggerState == LS_INIT )
@@ -124,8 +136,13 @@ void loop()
 		else if ( ( cmd[0] == 'S' ) && ( cmd[1] == 'L' ))
 		{
 		    coordinatorAddress64.setLsb( pack4bytes( value ) );
-		    currentLoggerState = LS_LOGGING;
+		    Console.print( "Coordinator address: " );
+		    String s = 
+			String( coordinatorAddress64.getMsb(), HEX ) +
+			String( coordinatorAddress64.getLsb(), HEX );
+		    Console.println( s );
 		    Console.println( "Going to LS_LOGGING." );
+		    currentLoggerState = LS_LOGGING;
 
 		    // At this point we no longer need the request in transit flag
 		    // as any replies we receive from now on are wholly contained
@@ -145,6 +162,13 @@ void loop()
 		Console.print( "Received AT_COMMAND_RESPONSE " );
 		Console.print( (char)(cmd[0]) );
 		Console.println( (char)(cmd[1]) );
+
+		// Node discovery response?
+		if (( cmd[0] == 'N' ) && ( cmd[1] == 'D' ))
+		{
+		    handleNetworkDiscoveryResponse( atCommandResponse.getValue(),
+						    atCommandResponse.getValueLength() );
+		}
 	    }
 	    else if (xbee.getResponse().getApiId() == REMOTE_AT_COMMAND_RESPONSE )
 	    {
@@ -160,13 +184,6 @@ void loop()
 		    String( atCmdResponse.getRemoteAddress64().getLsb(), HEX );
 		radioMac.toUpperCase();
 		Console.println( radioMac );
-		if (( cmd[0] == 'N' ) && ( cmd[1] == 'D' ))
-		{
-		    if ( atCmdResponse.getRemoteAddress64() != coordinatorAddress64 )
-		    {
-			addAddressToNodeList( atCmdResponse.getRemoteAddress64() );
-		    }
-		}
 		if (( cmd[0] == 'I' ) && ( cmd[1] == 'S' ))
 		{
 		    uint8_t* data = atCmdResponse.getValue();
@@ -227,6 +244,24 @@ void loop()
     delay( 100 );
 }
 
+void handleNetworkDiscoveryResponse( uint8_t* data, int length )
+{
+#if 0
+    Console.print( "ND payload: " );
+    for ( int i = 0; i < length; i++ )
+    {
+	Console.print( (char)(data[i]), HEX );
+	Console.print( " " );
+    }
+    Console.println( "" );
+#endif
+
+    uint32_t serialHigh = pack4bytes( data + 2 );
+    uint32_t serialLow  = pack4bytes( data + 6 );
+
+    addAddressToNodeList( serialHigh, serialLow );
+}
+
 bool ndSent = false;
 
 unsigned long delayTimerMillis = 0;
@@ -271,11 +306,8 @@ void handleSending( )
 	    // Need to send out ATND command to get all nodes to reply with
 	    // their info.
 	    uint8_t ndCmd[] = {'N','D'};
-	    XBeeAddress64 broadcastAddress = XBeeAddress64( 0x00000000, 0x0000ffff );
 
-	    // The 0, 0 at the end is no value associated with this command.
-	    RemoteAtCommandRequest ndRequest = 
-		RemoteAtCommandRequest( broadcastAddress, ndCmd, 0, 0 );
+	    AtCommandRequest ndRequest = AtCommandRequest( ndCmd );
 	    xbee.send( ndRequest );
 	    ndSent = true;
 	}
@@ -307,17 +339,29 @@ void handleSending( )
     }
 }
 
-void addAddressToNodeList( XBeeAddress64& newAddress )
+void addAddressToNodeList( uint32_t serialHigh, uint32_t serialLow )
 {
+    // Verify that this is a good address and got garbage (all zeros).
+    if ( ( serialHigh == 0 ) || ( serialLow == 0 ))
+    {
+	Console.println( "IGNORING add of bogus address to node list!" );
+	return;
+    }
+    if ( ( serialHigh == coordinatorAddress64.getMsb() ) &&
+	 ( serialLow  == coordinatorAddress64.getLsb() ) )
+    {
+	return;
+    }
     for ( int i = 0; i < numSensorNodes; i++ )
     {
-	if ( newAddress == sensorNodeList[ i ] )
+	if ( ( serialHigh == sensorNodeList[ i ].getMsb() ) &&
+	     ( serialLow  == sensorNodeList[ i ].getLsb() ) )
 	{
 	    return;
 	}
     }
-    sensorNodeList[ numSensorNodes ].setMsb( newAddress.getMsb() );
-    sensorNodeList[ numSensorNodes ].setLsb( newAddress.getLsb() );
+    sensorNodeList[ numSensorNodes ].setMsb( serialHigh );
+    sensorNodeList[ numSensorNodes ].setLsb( serialLow );
     numSensorNodes++;
 }
 
@@ -330,8 +374,10 @@ void sendMeasurementToDatabase( String radio_mac, int measurementType, float val
     url += measurementType;
     url += "&value=";
     url += value;
-  
+#if 0  
     // The result of the get isn't used. Data is being sent to the server to be
     // logged and any response from the server is ignored.
     client.get( url );
+#endif
+    Console.println( "SENDING TO DB DISBALED FOR NOW!" );
 }

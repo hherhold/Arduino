@@ -178,13 +178,17 @@ void loop()
 		uint8_t* cmd = atCmdResponse.getCommand();
 		Console.print( (char)(cmd[0]) );
 		Console.println( (char)(cmd[1]) );
+                uint8_t status = atCmdResponse.getStatus();
+                Console.print( "Status = 0x" );
+                Console.println( status, HEX );
 		Console.print( "Received Remote AT response from:" );
 		String radioMac = 
 		    String( atCmdResponse.getRemoteAddress64().getMsb(), HEX ) +
 		    String( atCmdResponse.getRemoteAddress64().getLsb(), HEX );
 		radioMac.toUpperCase();
 		Console.println( radioMac );
-		if (( cmd[0] == 'I' ) && ( cmd[1] == 'S' ))
+                if ( ( status == 0x0 ) && 
+                     (( cmd[0] == 'I' ) && ( cmd[1] == 'S' )) )
 		{
 		    uint8_t* data = atCmdResponse.getValue();
 		    uint32_t value = ((uint32_t)(data[ 4 ])) << 8;

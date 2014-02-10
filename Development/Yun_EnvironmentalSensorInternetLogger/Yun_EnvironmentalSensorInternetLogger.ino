@@ -24,7 +24,7 @@
 #include <Console.h>
 #include <Bridge.h>
 #endif
-#include <HttpClient.h>
+#include <Process.h>
 
 #include <SoftwareSerial.h>
 #include <XBee.h>
@@ -268,7 +268,21 @@ void handleNetworkDiscoveryResponse( uint8_t* data, int length )
 
 bool ndSent = false;
 
+#define SAMPLE_PERIOD_SECONDS 10
 unsigned long delayTimerMillis = 0;
+
+void sendNetworkDiscoveryRequest( )
+{
+    // Do we need to discover the other radios in the network?
+    Console.println( "Sending out ND request!" );
+    // Need to send out ATND command to get all nodes to reply with
+    // their info.
+    uint8_t ndCmd[] = {'N','D'};
+
+    AtCommandRequest ndRequest = AtCommandRequest( ndCmd );
+    xbee.send( ndRequest );
+}
+
 
 void handleSending( )
 {
@@ -305,20 +319,13 @@ void handleSending( )
     {
 	if ( ( numSensorNodes == 0 ) && ( ndSent == false ) )
 	{
-	    // Do we need to discover the other radios in the network?
-	    Console.println( "Sending out ND request!" );
-	    // Need to send out ATND command to get all nodes to reply with
-	    // their info.
-	    uint8_t ndCmd[] = {'N','D'};
-
-	    AtCommandRequest ndRequest = AtCommandRequest( ndCmd );
-	    xbee.send( ndRequest );
+            sendNetworkDiscoveryRequest( );
 	    ndSent = true;
 	}
 	else
 	{
 	    // Logging "steady-state".
-	    if ( ( millis() - delayTimerMillis ) > 10000 )
+	    if ( ( millis() - delayTimerMillis ) > ( SAMPLE_PERIOD_SECONDS * 1000 ) )
 	    {
 		// Time to request sensor data.
 		for ( int i = 0; i < numSensorNodes; i++ )
@@ -371,17 +378,52 @@ void addAddressToNodeList( uint32_t serialHigh, uint32_t serialLow )
 
 void sendMeasurementToDatabase( String radio_mac, int measurementType, float value )
 {
-    HttpClient client;
-    String url = "http://www.fafoh.com/dbinsert.php?radio_mac=";
+    Process client;
+
+    String command = "curl -A \"Mozilla\" \"http://www.fafoh.com/dbinsert.php?radio_mac=";
+    command += radio_mac;
+    command += "&type=";
+    command += measurementType;
+    command += "&value=";
+    command += value;
+    command += "\"";
+
+    Console.println( command );
+    client.runShellCommand( command );
+
+#if 0
+    client.begin( "curl" );
+    client.addParameter( "-A \"Mozilla\"" );
+
+    String url = "\"http://www.fafoh.com/dbinsert.php?radio_mac=";
     url += radio_mac;
     url += "&type=";
     url += measurementType;
     url += "&value=";
     url += value;
-#if 0  
+    url += "\"";
+
+    Console.println( url );
+
+    client.run();
+#endif
+
+#if 0
+    HttpClient client;
+    String url = "-A \"Mozilla\" \"http://www.fafoh.com/dbinsert.php?radio_mac=";
+    url += radio_mac;
+    url += "&type=";
+    url += measurementType;
+    url += "&value=";
+    url += value;
+    url += "\"";
+
     // The result of the get isn't used. Data is being sent to the server to be
     // logged and any response from the server is ignored.
     client.get( url );
+
+    Console.println( url );
+
+    //    Console.println( "SENDING TO DB DISBALED FOR NOW!" );
 #endif
-    Console.println( "SENDING TO DB DISBALED FOR NOW!" );
 }

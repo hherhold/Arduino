@@ -25,6 +25,8 @@
 #include <Bridge.h>
 #endif
 #include <Process.h>
+#include <YunServer.h>
+#include <YunClient.h>
 
 #include <SoftwareSerial.h>
 #include <XBee.h>
@@ -36,10 +38,7 @@
 #define MEAS_TYPE_HUMIDITY		 4
 
 XBee xbee = XBee();
-
 SoftwareSerial mySerial( 10, 11 ); // rx, tx
-
-void sendMeasurementToDatabase( String radio_mac, int measurementType, float value );
 
 inline uint32_t pack4bytes( uint8_t* value )
 {
@@ -50,7 +49,6 @@ inline uint32_t pack4bytes( uint8_t* value )
     retval |= value[ 3 ];
     return retval;
 }
-
 
 enum LoggerState
 {
@@ -64,6 +62,27 @@ XBeeAddress64 sensorNodeList[ MAX_SENSOR_NODES ];
 int numSensorNodes = 0;
 
 LoggerState currentLoggerState = LS_INIT;
+
+XBeeAddress64 coordinatorAddress64 = XBeeAddress64( 0, 0 );
+
+YunServer server;
+
+// During the initialization process, we need synchronized communication,
+// meaning a request is sent and a reply is required before proceeding with
+// sending another request. This flag is used to denote that a request has been
+// sent and a reply is expected.
+// Once init is complete, this flag is not used. It's only for setup where
+// queries are sent for IDs that need more than one packet to process (64 bit
+// IDs, for example).
+// Currently the only request this is used for is to determine the coordinator
+// radio's 64-bit address, using the SH and SL commands separately.
+bool requestInTransit = false;
+
+void handleSending( );
+void handleNetworkDiscoveryResponse( uint8_t* data, int length );
+void addAddressToNodeList( uint32_t serialHigh, uint32_t serialLow );
+void sendMeasurementToDatabase( String radio_mac, int measurementType, float value );
+void processServerRequest(  YunClient client );
 
 void setup() 
 {
@@ -80,6 +99,10 @@ void setup()
       sensorNodeList[ i ].setLsb( 0 );
   }
   
+  // Yun server to receive commands from Linino.
+  server.listenOnLocalhost();
+  server.begin();
+
 #ifdef USE_DEBUG_CONSOLE
   while (!Console ) { ; }
   
@@ -87,23 +110,16 @@ void setup()
 #endif
 }
 
-XBeeAddress64 coordinatorAddress64 = XBeeAddress64( 0, 0 );
-
-// During the initialization process, we need synchronized communication,
-// meaning a request is sent and a reply is required before proceeding with
-// sending another request. This flag is used to denote that a request has been
-// sent and a reply is expected.
-// Once init is complete, this flag is not used. It's only for setup where
-// queries are sent for IDs that need more than one packet to process (64 bit
-// IDs, for example).
-bool requestInTransit = false;
-
-void handleSending( );
-void handleNetworkDiscoveryResponse( uint8_t* data, int length );
-void addAddressToNodeList( uint32_t serialHigh, uint32_t serialLow );
-
 void loop() 
 {
+    YunClient client = server.accept();
+
+    if ( client )
+    {
+        processServerRequest( client );
+        client.stop();
+    }
+
     handleSending( );
 
     xbee.readPacket();
@@ -136,12 +152,14 @@ void loop()
 		else if ( ( cmd[0] == 'S' ) && ( cmd[1] == 'L' ))
 		{
 		    coordinatorAddress64.setLsb( pack4bytes( value ) );
+#if 0
 		    Console.print( "Coordinator address: " );
 		    String s = 
 			String( coordinatorAddress64.getMsb(), HEX ) +
 			String( coordinatorAddress64.getLsb(), HEX );
 		    Console.println( s );
 		    Console.println( "Going to LS_LOGGING." );
+#endif
 		    currentLoggerState = LS_LOGGING;
 
 		    // At this point we no longer need the request in transit flag
@@ -203,7 +221,7 @@ void loop()
 
 		}
 	    }
-    
+#if 0    
 	    else if (xbee.getResponse().getApiId() == ZB_IO_SAMPLE_RESPONSE)
 	    {
 		ZBRxIoSampleResponse ioSample = ZBRxIoSampleResponse();
@@ -235,11 +253,15 @@ void loop()
 		    Console.println( "Expected analog data in this packet!" );
 		}
 	    } 
-	    else {
+	    else 
+            {
 		Console.print("Expected I/O Sample, but got ");
 		Console.print(xbee.getResponse().getApiId(), HEX);
-	    }    
-	} else if (xbee.getResponse().isError()) {
+	    }
+#endif    
+	} 
+        else if (xbee.getResponse().isError()) 
+        {
 	    Console.print("Error reading packet.  Error code: ");  
 	    Console.println(xbee.getResponse().getErrorCode());
 	}
@@ -268,7 +290,7 @@ void handleNetworkDiscoveryResponse( uint8_t* data, int length )
 
 bool ndSent = false;
 
-#define SAMPLE_PERIOD_SECONDS 10
+unsigned int samplePeriodInSeconds = 10;
 unsigned long delayTimerMillis = 0;
 
 void sendNetworkDiscoveryRequest( )
@@ -325,7 +347,7 @@ void handleSending( )
 	else
 	{
 	    // Logging "steady-state".
-	    if ( ( millis() - delayTimerMillis ) > ( SAMPLE_PERIOD_SECONDS * 1000 ) )
+	    if ( ( millis() - delayTimerMillis ) > ( samplePeriodInSeconds * 1000 ) )
 	    {
 		// Time to request sensor data.
 		for ( int i = 0; i < numSensorNodes; i++ )
@@ -345,7 +367,6 @@ void handleSending( )
 		}
 	    }
 	    Console.print( numSensorNodes );
-	    
 	}
     }
 }
@@ -388,7 +409,7 @@ void sendMeasurementToDatabase( String radio_mac, int measurementType, float val
     command += value;
     command += "\"";
 
-    Console.println( command );
+//    Console.println( command );
     client.runShellCommand( command );
 
 #if 0
@@ -426,4 +447,17 @@ void sendMeasurementToDatabase( String radio_mac, int measurementType, float val
 
     //    Console.println( "SENDING TO DB DISBALED FOR NOW!" );
 #endif
+}
+
+void processServerRequest( YunClient client )
+{
+    String command = client.readStringUntil( '/' );
+    if ( command == "samplePeriod" )
+    {
+        int value = client.parseInt();
+        samplePeriodInSeconds = value;
+        Console.print( "NEW delay set to " );
+        Console.print( samplePeriodInSeconds );
+        Console.println( " seconds." );
+    }
 }

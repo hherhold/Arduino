@@ -1198,7 +1198,6 @@ Tx64Request::Tx64Request(XBeeAddress64 &addr64, uint8_t *data, uint8_t dataLengt
 }
 
 uint8_t Tx64Request::getFrameData(uint8_t pos) {
-
 	if (pos == 0) {
 		return (_addr64.getMsb() >> 24) & 0xff;
 	} else if (pos == 1) {
@@ -1372,6 +1371,37 @@ void RemoteAtCommandRequest::setApplyChanges(bool applyChanges) {
 
 
 uint8_t RemoteAtCommandRequest::getFrameData(uint8_t pos) {
+    switch (pos) {
+    case 0:
+        return (_remoteAddress64.getMsb() >> 24) & 0xff;
+    case 1:
+        return (_remoteAddress64.getMsb() >> 16) & 0xff;
+    case 2:
+        return (_remoteAddress64.getMsb() >> 8) & 0xff;
+    case 3:
+        return _remoteAddress64.getMsb() & 0xff;
+    case 4:
+        return (_remoteAddress64.getLsb() >> 24) & 0xff;
+    case 5:
+        return (_remoteAddress64.getLsb() >> 16) & 0xff;
+    case 6:
+        return(_remoteAddress64.getLsb() >> 8) & 0xff;
+    case 7:
+        return _remoteAddress64.getLsb() & 0xff;
+    case 8:
+        return (_remoteAddress16 >> 8) & 0xff;
+    case 9:
+        return _remoteAddress16 & 0xff;
+    case 10:
+        return _applyChanges ? 2: 0;
+    case 11:
+        return getCommand()[0];
+    case 12:
+        return getCommand()[1];
+    default:
+        return getCommandValue()[pos - REMOTE_AT_COMMAND_API_LENGTH];
+    }
+#if 0
 	if (pos == 0) {
 		return (_remoteAddress64.getMsb() >> 24) & 0xff;
 	} else if (pos == 1) {
@@ -1401,6 +1431,7 @@ uint8_t RemoteAtCommandRequest::getFrameData(uint8_t pos) {
 	} else {
 		return getCommandValue()[pos - REMOTE_AT_COMMAND_API_LENGTH];
 	}
+#endif
 }
 
 uint8_t RemoteAtCommandRequest::getFrameDataLength() {

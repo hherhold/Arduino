@@ -19,14 +19,17 @@
 #define FOO 2
 #endif
 
-#define USE_DEBUG_CONSOLE
+#undef USE_DEBUG_CONSOLE
+
 #ifdef USE_DEBUG_CONSOLE
 #include <Console.h>
-#include <Bridge.h>
 #endif
+
+#include <Bridge.h>
 #include <Process.h>
-#include <YunServer.h>
-#include <YunClient.h>
+
+// #include <YunServer.h>
+// #include <YunClient.h>
 
 #include <SoftwareSerial.h>
 #include <XBee.h>
@@ -40,7 +43,7 @@
 XBee xbee = XBee();
 SoftwareSerial mySerial( 10, 11 ); // rx, tx
 
-inline uint32_t pack4bytes( uint8_t* value )
+uint32_t pack4bytes( uint8_t* value )
 {
     uint32_t retval = 0;
     retval  = (( uint32_t )(value[ 0 ])) << 24;
@@ -65,7 +68,7 @@ LoggerState currentLoggerState = LS_INIT;
 
 XBeeAddress64 coordinatorAddress64 = XBeeAddress64( 0, 0 );
 
-YunServer server;
+// YunServer server;
 
 // During the initialization process, we need synchronized communication,
 // meaning a request is sent and a reply is required before proceeding with
@@ -82,7 +85,8 @@ void handleSending( );
 void handleNetworkDiscoveryResponse( uint8_t* data, int length );
 void addAddressToNodeList( uint32_t serialHigh, uint32_t serialLow );
 void sendMeasurementToDatabase( String radio_mac, int measurementType, float value );
-void processServerRequest(  YunClient client );
+
+// void processServerRequest( YunClient client );
 
 void setup() 
 {
@@ -100,8 +104,8 @@ void setup()
   }
   
   // Yun server to receive commands from Linino.
-  server.listenOnLocalhost();
-  server.begin();
+//  server.listenOnLocalhost();
+//  server.begin();
 
 #ifdef USE_DEBUG_CONSOLE
   while (!Console ) { ; }
@@ -112,13 +116,13 @@ void setup()
 
 void loop() 
 {
-    YunClient client = server.accept();
-
-    if ( client )
-    {
-        processServerRequest( client );
-        client.stop();
-    }
+//    YunClient client = server.accept();
+//
+//    if ( client )
+//    {
+//        processServerRequest( client );
+//        client.stop();
+//    }
 
     handleSending( );
 
@@ -128,11 +132,15 @@ void loop()
     {
 	if ( xbee.getResponse().isError() )
 	{
+#ifdef USE_DEBUG_CONSOLE
 	    Console.print( "Received packet with error status 0x" );
 	    Console.println( xbee.getResponse().getErrorCode() );
+#endif
 	}
+#ifdef USE_DEBUG_CONSOLE
 	Console.print( "Packet available. API ID = 0x" );
 	Console.println( xbee.getResponse().getApiId(), HEX );
+#endif
 
 	requestInTransit = false;
 	if ( currentLoggerState == LS_INIT )
@@ -177,9 +185,10 @@ void loop()
 		AtCommandResponse atCommandResponse;
 		xbee.getResponse().getAtCommandResponse( atCommandResponse );
 		uint8_t* cmd = atCommandResponse.getCommand();
+#ifdef USE_DEBUG_CONSOLE
 		Console.print( "Received AT_COMMAND_RESPONSE " );
 		Console.print( (char)(cmd[0]) );
-		Console.println( (char)(cmd[1]) );
+#endif		Console.println( (char)(cmd[1]) );
 
 		// Node discovery response?
 		if (( cmd[0] == 'N' ) && ( cmd[1] == 'D' ))
@@ -192,19 +201,22 @@ void loop()
 	    {
 		RemoteAtCommandResponse atCmdResponse;
 		xbee.getResponse().getRemoteAtCommandResponse( atCmdResponse );
-		Console.print( "Received REMOTE_AT_COMMAND_RESPONSE " );
 		uint8_t* cmd = atCmdResponse.getCommand();
-		Console.print( (char)(cmd[0]) );
-		Console.println( (char)(cmd[1]) );
                 uint8_t status = atCmdResponse.getStatus();
-                Console.print( "Status = 0x" );
-                Console.println( status, HEX );
-		Console.print( "Received Remote AT response from:" );
 		String radioMac = 
 		    String( atCmdResponse.getRemoteAddress64().getMsb(), HEX ) +
 		    String( atCmdResponse.getRemoteAddress64().getLsb(), HEX );
 		radioMac.toUpperCase();
+
+#ifdef USE_DEBUG_CONSOLE
+		Console.print( "Received REMOTE_AT_COMMAND_RESPONSE " );
+		Console.print( (char)(cmd[0]) );
+		Console.println( (char)(cmd[1]) );
+                Console.print( "Status = 0x" );
+                Console.println( status, HEX );
+		Console.print( "Received Remote AT response from:" );
 		Console.println( radioMac );
+#endif
                 if ( ( status == 0x0 ) && 
                      (( cmd[0] == 'I' ) && ( cmd[1] == 'S' )) )
 		{
@@ -213,8 +225,10 @@ void loop()
 		    value |= ((uint32_t)(data[ 5 ]));
 		    float temperatureCelsius = 
 			( ( (value / 1023.0 ) * 1.2 ) - 0.5 ) * 100.0;
+#ifdef USE_DEBUG_CONSOLE
 		    Console.print( "Logging temperature: " );
 		    Console.println( temperatureCelsius );
+#endif
 		    sendMeasurementToDatabase( radioMac, 
 					       MEAS_TYPE_TEMP_C, 
 					       temperatureCelsius );
@@ -262,8 +276,10 @@ void loop()
 	} 
         else if (xbee.getResponse().isError()) 
         {
+#ifdef USE_DEBUG_CONSOLE
 	    Console.print("Error reading packet.  Error code: ");  
 	    Console.println(xbee.getResponse().getErrorCode());
+#endif
 	}
     }
 
@@ -296,7 +312,9 @@ unsigned long delayTimerMillis = 0;
 void sendNetworkDiscoveryRequest( )
 {
     // Do we need to discover the other radios in the network?
+#ifdef USE_DEBUG_CONSOLE
     Console.println( "Sending out ND request!" );
+#endif
     // Need to send out ATND command to get all nodes to reply with
     // their info.
     uint8_t ndCmd[] = {'N','D'};
@@ -318,7 +336,9 @@ void handleSending( )
 	     ( coordinatorAddress64.getLsb() == 0 ) )
 	{
 	    // First find coordinator ID. Use OP to get operating ID.
+#ifdef USE_DEBUG_CONSOLE
 	    Console.println( "Sending out SH request!" );
+#endif
 	    uint8_t cmd[] = {'S','H'};
 	    AtCommandRequest request = AtCommandRequest( cmd );
 	    xbee.send( request );
@@ -360,13 +380,17 @@ void handleSending( )
 		    xbee.send( request );
 		}
 		delayTimerMillis = millis();
+#ifdef USE_DEBUG_CONSOLE
 		Console.print( "X" );
+#endif
 		if ( numSensorNodes == 0 )
 		{
 		    ndSent = false;
 		}
 	    }
+#ifdef USE_DEBUG_CONSOLE
 	    Console.print( numSensorNodes );
+#endif
 	}
     }
 }
@@ -376,7 +400,9 @@ void addAddressToNodeList( uint32_t serialHigh, uint32_t serialLow )
     // Verify that this is a good address and got garbage (all zeros).
     if ( ( serialHigh == 0 ) || ( serialLow == 0 ))
     {
+#ifdef USE_DEBUG_CONSOLE
 	Console.println( "IGNORING add of bogus address to node list!" );
+#endif
 	return;
     }
     if ( ( serialHigh == coordinatorAddress64.getMsb() ) &&
@@ -449,15 +475,18 @@ void sendMeasurementToDatabase( String radio_mac, int measurementType, float val
 #endif
 }
 
-void processServerRequest( YunClient client )
-{
-    String command = client.readStringUntil( '/' );
-    if ( command == "samplePeriod" )
-    {
-        int value = client.parseInt();
-        samplePeriodInSeconds = value;
-        Console.print( "NEW delay set to " );
-        Console.print( samplePeriodInSeconds );
-        Console.println( " seconds." );
-    }
-}
+// void processServerRequest( YunClient client )
+// {
+//     String command = client.readStringUntil( '/' );
+//     if ( command == "samplePeriod" )
+//     {
+//         int value = client.parseInt();
+//         samplePeriodInSeconds = value;
+// #ifdef USE_DEBUG_CONSOLE
+//         Console.print( "NEW delay set to " );
+//         Console.print( samplePeriodInSeconds );
+//         Console.println( " seconds." );
+// #endif
+//     }
+// }
+

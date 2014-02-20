@@ -149,16 +149,6 @@ void process(YunClient client)
         client.println( s );
     }
 
-    if ( command == "dodiscovery" )
-    {
-        doNetworkDiscovery( );
-    }
-
-    if ( command == "listnodes" )
-    {
-        
-    }
-
     // is "digital" command?
     if (command == "digital") {
         digitalCommand(client);

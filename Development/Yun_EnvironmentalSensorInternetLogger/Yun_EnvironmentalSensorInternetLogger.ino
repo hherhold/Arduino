@@ -19,7 +19,7 @@
 #define FOO 2
 #endif
 
-#undef USE_DEBUG_CONSOLE
+#define USE_DEBUG_CONSOLE
 
 #ifdef USE_DEBUG_CONSOLE
 #include <Console.h>

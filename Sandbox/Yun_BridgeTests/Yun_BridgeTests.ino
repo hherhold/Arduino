@@ -9,13 +9,8 @@ void setup()
     Bridge.begin();
 }
 
-int currentNumber = 0;
-
 void loop() 
 {
-//    Bridge.get();
-
-#if 1
     // Bridge stress test from:
     // http://forum.arduino.cc/index.php?topic=201484.msg1484792#msg1484792
     unsigned int len;
@@ -33,6 +28,5 @@ void loop()
         }
         delay(250);
     }
-#endif
 }
 

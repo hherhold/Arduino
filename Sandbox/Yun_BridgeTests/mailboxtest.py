@@ -17,6 +17,6 @@ print "resetting mcu now"
 call(["reset-mcu"])
 time.sleep(5)
 
-#mailbox.writeMessage( "blah" )
+mailbox.writeMessage( "blah" )
 
 

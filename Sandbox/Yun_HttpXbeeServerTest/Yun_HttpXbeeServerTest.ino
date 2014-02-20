@@ -21,29 +21,42 @@ YunServer server;
 XBee xbee = XBee();
 SoftwareSerial mySerial( 10, 11 ); // rx, tx
 XBeeAddress64 coordinatorAddress64 = XBeeAddress64( 0, 0 );
+bool initializeCoordinatorAddress( );
 
 void setup() 
 {
-  // Bridge startup
-  pinMode(13,OUTPUT);
-  digitalWrite(13, LOW);
-  Bridge.begin();
-  digitalWrite(13, HIGH);
+    // Bridge startup
+    pinMode(13,OUTPUT);
+    digitalWrite(13, LOW);
+    Bridge.begin();
+    digitalWrite(13, HIGH);
 
-  xbee.setSerial( mySerial );
-  mySerial.begin( 9600 );
+    xbee.setSerial( mySerial );
+    mySerial.begin( 9600 );
 
-  // Listen for incoming connection only from localhost
-  // (no one from the external network could connect)
-  server.listenOnLocalhost();
-  server.begin();
+    // Listen for incoming connection only from localhost
+    // (no one from the external network could connect)
+    server.listenOnLocalhost();
+    server.begin();
 
 #ifdef USE_DEBUG_CONSOLE
-  while (!Console ) { ; }
+    while (!Console ) { ; }
   
-  Console.println( "You're connected to the console!" );
+    Console.println( "You're connected to the console!" );
 #endif
 
+#ifdef USE_DEBUG_CONSOLE
+    if ( initializeCoordinatorAddress( ) == true )
+    {
+        Console.println( "Got coordinator address!" );
+    }
+    else
+    {
+        Console.println( "Unable to initialize coordinator address!" );
+    }
+#else
+    initializeCoordinatorAddress( );
+#endif
 }
 
 void loop() 
@@ -54,90 +67,65 @@ void loop()
         process(client);
         client.stop();
     }
-
+#if 0
     handleXBeeSending( );
 
     handleXBeeReceiving( );
+#endif
 
     delay( 100 );
     Console.print( "." );
 }
 
-bool requestInTransit = false;
-
-void handleXBeeSending( )
+bool initializeCoordinatorAddress( )
 {
-    // First handle any XBee stuff.
-    if ( requestInTransit == false )
+    // First find coordinator ID. Use OP to get operating ID.
+    uint8_t sendCmd[] = {'S','H'};
+    AtCommandRequest request = AtCommandRequest( sendCmd );
+    xbee.send( request );
+    Console.println( "Sent SH" );
+
+    xbee.readPacket( 500 );
+    if ( xbee.getResponse().isAvailable() == true )
     {
-        // TODO - this is a little odd as it allows SH to be sent
-        //        twice depending on timing.
-        if ( ( coordinatorAddress64.getMsb() == 0 ) &&
-             ( coordinatorAddress64.getLsb() == 0 ) )
-        {
-	    // First find coordinator ID. Use OP to get operating ID.
-	    uint8_t cmd[] = {'S','H'};
-	    AtCommandRequest request = AtCommandRequest( cmd );
-	    xbee.send( request );
-	    requestInTransit = true;
-#ifdef USE_DEBUG_CONSOLE
-            Console.println( "Sent SH" );
-#endif
-	}
-	else if ( ( coordinatorAddress64.getMsb() != 0 ) &&
-		  ( coordinatorAddress64.getLsb() == 0 ) )
-	{
-	    // Half of the coordinator ID has been recieved. 
-	    // Request the other half.
-	    uint8_t cmd[] = {'S','L'};
-	    AtCommandRequest request = AtCommandRequest( cmd );
-	    xbee.send( request );
-	    requestInTransit = true;
-#ifdef USE_DEBUG_CONSOLE
-            Console.println( "Sent SL" );
-#endif
-	}
-    }
-}
-
-void handleXBeeReceiving( )
-{
-    xbee.readPacket();
-	
-    if (xbee.getResponse().isAvailable())
-    {
-#ifdef USE_DEBUG_CONSOLE
-        Console.println( "XBee Packet available" );
-#endif
-        requestInTransit = false;
-
-        if ( xbee.getResponse().isError() )
-        {
-            // TODO - Error logging
-            return;
-        }
-
         if (xbee.getResponse().getApiId() == AT_COMMAND_RESPONSE )
         {
             AtCommandResponse atCmdResponse;
             xbee.getResponse().getAtCommandResponse( atCmdResponse );
-            
+
             uint8_t* cmd = atCmdResponse.getCommand();
             uint8_t* value = atCmdResponse.getValue();
-            
+            // SH?
             if ( ( cmd[0] == 'S' ) && ( cmd[1] == 'H' ))
             {
                 coordinatorAddress64.setMsb( pack4bytes( value ) );
             }
-            else if ( ( cmd[0] == 'S' ) && ( cmd[1] == 'L' ))
+
+            sendCmd[ 1 ] = 'L';
+            request = AtCommandRequest( sendCmd );
+            xbee.send( request );
+            Console.println( "Sent SL" );
+
+            xbee.readPacket( 500 );
+            if ( xbee.getResponse().isAvailable() == true )
             {
-                coordinatorAddress64.setLsb( pack4bytes( value ) );
+                if (xbee.getResponse().getApiId() == AT_COMMAND_RESPONSE )
+                {
+                    AtCommandResponse atCmdResponse;
+                    xbee.getResponse().getAtCommandResponse( atCmdResponse );
+
+                    uint8_t* cmd = atCmdResponse.getCommand();
+                    uint8_t* value = atCmdResponse.getValue();
+                    // SH?
+                    if ( ( cmd[0] == 'S' ) && ( cmd[1] == 'L' ))
+                    {
+                        coordinatorAddress64.setLsb( pack4bytes( value ) );
+                    }
+                }
             }
         }
     }
 }
-
-
 
 void process(YunClient client) 
 {
@@ -159,6 +147,16 @@ void process(YunClient client)
       
         client.print( "Coordinator = " );
         client.println( s );
+    }
+
+    if ( command == "dodiscovery" )
+    {
+        doNetworkDiscovery( );
+    }
+
+    if ( command == "listnodes" )
+    {
+        
     }
 
     // is "digital" command?

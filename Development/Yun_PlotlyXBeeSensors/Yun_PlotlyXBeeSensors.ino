@@ -85,7 +85,7 @@ void loop()
     }
 
     delay( 100 );
-    Console.print( "." );
+    Console.print( numSensorNodes );
 }
 
 bool initializeCoordinatorAddress( )
@@ -126,11 +126,27 @@ bool initializeCoordinatorAddress( )
                     if ( ( cmd[0] == 'S' ) && ( cmd[1] == 'L' ))
                     {
                         coordinatorAddress64.setLsb( pack4bytes( value ) );
+                        return true;
                     }
                 }
             }
+            else
+            {
+                return false;
+            }
+        }
+        else
+        {
+            return false;
         }
     }
+    else
+    {
+        // Timeout
+        return false;
+    }
+    // Fallthrough.
+    return false;
 }
 
 void sendAtCommand( uint8_t c1, uint8_t c2 )
@@ -140,6 +156,16 @@ void sendAtCommand( uint8_t c1, uint8_t c2 )
     AtCommandRequest request = AtCommandRequest( cmd );
     xbee.send( request );
 }
+
+void sendRemoteAtCommand( XBeeAddress64& dest, uint8_t c1, uint8_t c2 )
+{
+    uint8_t cmd[] = { c1, c2 };
+
+    RemoteAtCommandRequest request = 
+        RemoteAtCommandRequest( dest, cmd, 0, 0 );
+    xbee.send( request );
+}
+
 
 void checkForXBeePackets( )
 {
@@ -226,6 +252,39 @@ void addAddressToNodeList( uint32_t serialHigh, uint32_t serialLow )
     numSensorNodes++;
 }
 
+String addressToString( XBeeAddress64& addr )
+{
+    String s;
+    s += String( (uint8_t)( ( addr.getMsb() >> 24 ) & 0xFF ), HEX );
+    s += ":";
+    s += String( (uint8_t)( ( addr.getMsb() >> 16 ) & 0xFF ), HEX );
+    s += ":";
+    s += String( (uint8_t)( ( addr.getMsb() >>  8 ) & 0xFF ), HEX );
+    s += ":";
+    s += String( (uint8_t)( ( addr.getMsb()       ) & 0xFF ), HEX );
+    s += ":";
+    s += String( (uint8_t)( ( addr.getLsb() >> 24 ) & 0xFF ), HEX );
+    s += ":";
+    s += String( (uint8_t)( ( addr.getLsb() >> 16 ) & 0xFF ), HEX );
+    s += ":";
+    s += String( (uint8_t)( ( addr.getLsb() >>  8 ) & 0xFF ), HEX );
+    s += ":";
+    s += String( (uint8_t)( ( addr.getLsb()       ) & 0xFF ), HEX );
+    return s;
+}
+
+XBeeAddress64 stringToAddress( String& s )
+{
+    XBeeAddress64 addr;
+    addr.setMsb( 0 );
+    addr.setLsb( 0 );
+
+//    strtol( buf1, buf2, 16 );
+
+    return addr;
+}
+
+
 void process(YunClient client) 
 {
     // read the command
@@ -240,24 +299,65 @@ void process(YunClient client)
 
     if ( command == "coordinator" )
     {
-        String s = 
-            String( coordinatorAddress64.getMsb(), HEX ) +
-            String( coordinatorAddress64.getLsb(), HEX );
-      
-        client.print( "Coordinator = " );
-        client.println( s );
+        client.print( coordinatorAddress64.getMsb() );
+        client.print( ":" );
+        client.print( coordinatorAddress64.getLsb() );
     }
 
+    // Discovery is handled as an "asynchronous" command. XBee routers
+    // and end devices can take up to 6-7 seconds to reply to an ND
+    // command, so we send it off and then let the main loop() handle
+    // responses and adding them to the list of nodes.
     if ( command == "dodiscovery" )
     {
         sendAtCommand( 'N', 'D' );
     }
-
     if ( command == "listnodes" )
     {
-        
+        for ( int i = 0; i < numSensorNodes; i++ )
+        {
+            client.print( sensorNodeList[ i ].getMsb() );
+            client.print( ":" );
+            client.print( sensorNodeList[ i ].getLsb() );
+            client.print( " " );
+        }
+    }
+    
+    if ( command == "measure" )
+    {
+        uint32_t msb = client.parseInt();
+        uint32_t lsb = client.parseInt();
+        XBeeAddress64 nodeAddr;
+        nodeAddr.setMsb( msb );
+        nodeAddr.setLsb( lsb );
+
+        sendRemoteAtCommand( nodeAddr, 'I', 'S' );
+
+        xbee.readPacket( 2000 );
+        if ( xbee.getResponse().getApiId() == REMOTE_AT_COMMAND_RESPONSE )
+        {
+            RemoteAtCommandResponse atCmdResponse;
+            xbee.getResponse().getRemoteAtCommandResponse( atCmdResponse );
+            uint8_t* cmd = atCmdResponse.getCommand();
+            uint8_t status = atCmdResponse.getStatus();
+            if ( ( status == 0x0 ) && 
+                 (( cmd[0] == 'I' ) && ( cmd[1] == 'S' )) )
+            {
+                uint8_t* data = atCmdResponse.getValue();
+                uint32_t value = ((uint32_t)(data[ 4 ])) << 8;
+                value |= ((uint32_t)(data[ 5 ]));
+                float temperatureCelsius = 
+                    ( ( (value / 1023.0 ) * 1.2 ) - 0.5 ) * 100.0;
+
+                client.print( temperatureCelsius );
+            }
+        }
+
+//        Console.print( "Node = " );
+//        Console.println( addressToString( nodeAddr ) );
     }
 
+#if 0
     // is "digital" command?
     if (command == "digital") {
         digitalCommand(client);
@@ -272,8 +372,9 @@ void process(YunClient client)
     if (command == "mode") {
         modeCommand(client);
     }
+#endif
 }
-
+#if 0
 void digitalCommand(YunClient client) {
   int pin, value;
 
@@ -378,7 +479,7 @@ void modeCommand(YunClient client) {
   client.print(F("error: invalid mode "));
   client.print(mode);
 }
-
+#endif
 uint32_t pack4bytes( uint8_t* value )
 {
     uint32_t retval = 0;

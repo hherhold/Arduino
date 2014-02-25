@@ -45,21 +45,38 @@ index = 0
 
 while True:
     
-    trace = 0
+    # Get the list of measurements
+    tempMeasurements = []
     for node in nodeAddresses:
         measUrl = urlbase + 'measure/' + node
         print( 'Measure url = ' + measUrl );
         temp = urllib2.urlopen( measUrl ).read()
-        if index == 0:
-            print( 'append index ' + str(index) + ' temp ' + str(temp) )
-            py.plot( [ index ], [ float( temp ) ], filename='temp_multitrace', fileopt='append' )
-        else:
-            print( 'extend index ' + str(index) + ' temp ' + str(temp) + ' trace ' + str(trace) )
-            py.plot( [ index ], [ float( temp ) ], filename='temp_multitrace', fileopt='extend', traces=[trace] )
-        trace = trace + 1
+        tempMeasurements = tempMeasurements + [float(temp)]
+
+    print( 'Measurements: ' + str(tempMeasurements) )
+
+    try:
+        if len( tempMeasurements ) == len( nodeAddresses ):
+            trace = 0
+            for curTemp in tempMeasurements:
+                if index == 0:
+                    print( 'append index ' + str(index) + ' temp ' + str(curTemp) )
+                    py.plot( [ index ], [ curTemp ], 
+                             filename='temp_multitrace', fileopt='append' )
+                else:
+                    print( 'extend index ' + str(index) + ' temp ' + 
+                           str(curTemp) + ' trace ' + str(trace) )
+                    py.plot( [ index ], [ curTemp ], 
+                             filename='temp_multitrace', fileopt='extend', traces=[trace] )
+                    trace = trace + 1
+            index = index + 1
+
+    except:
+        print "Unexpected error:", sys.exc_info()[0]
+        pass
+
 
     time.sleep( 10 );
-    index = index + 1
         
 ###    [index], [temp], [index], [temp]
 ###

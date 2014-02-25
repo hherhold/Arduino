@@ -6,6 +6,7 @@ import sys
 from subprocess import call
 import plotly
 from platform import system
+import datetime
 
 if system() == 'Linux':
     urlbase = 'http://localhost/arduino/'
@@ -54,6 +55,7 @@ while True:
         tempMeasurements = tempMeasurements + [float(temp)]
 
     print( 'Measurements: ' + str(tempMeasurements) )
+    curTime = datetime.datetime.now()
 
     try:
         if len( tempMeasurements ) == len( nodeAddresses ):
@@ -61,12 +63,12 @@ while True:
             for curTemp in tempMeasurements:
                 if index == 0:
                     print( 'append index ' + str(index) + ' temp ' + str(curTemp) )
-                    py.plot( [ index ], [ curTemp ], 
+                    py.plot( [ curTime ], [ curTemp ], 
                              filename='temp_multitrace', fileopt='append' )
                 else:
                     print( 'extend index ' + str(index) + ' temp ' + 
                            str(curTemp) + ' trace ' + str(trace) )
-                    py.plot( [ index ], [ curTemp ], 
+                    py.plot( [ curTime ], [ curTemp ], 
                              filename='temp_multitrace', fileopt='extend', traces=[trace] )
                     trace = trace + 1
             index = index + 1

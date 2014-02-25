@@ -42,11 +42,24 @@ print( 'done.' )
 
 index = 0
 
+
 while True:
-    measUrl = urlbase + 'measure/' + nodeAddresses[ 0 ]
-    print( 'Measure url = ' + measUrl );
-    temp = urllib2.urlopen( measUrl ).read()
-    print( temp )
-    py.plot( [ index ], [ float( temp ) ], filename='temp_1trace', fileopt='extend' )
+    
+    trace = 0
+    for node in nodeAddresses:
+        measUrl = urlbase + 'measure/' + node
+        print( 'Measure url = ' + measUrl );
+        temp = urllib2.urlopen( measUrl ).read()
+        if index == 0:
+            print( 'append index ' + str(index) + ' temp ' + str(temp) )
+            py.plot( [ index ], [ float( temp ) ], filename='temp_multitrace', fileopt='append' )
+        else:
+            print( 'extend index ' + str(index) + ' temp ' + str(temp) + ' trace ' + str(trace) )
+            py.plot( [ index ], [ float( temp ) ], filename='temp_multitrace', fileopt='extend', traces=[trace] )
+        trace = trace + 1
+
     time.sleep( 10 );
     index = index + 1
+        
+###    [index], [temp], [index], [temp]
+###

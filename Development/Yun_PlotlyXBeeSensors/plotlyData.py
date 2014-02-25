@@ -43,28 +43,37 @@ print( 'done.' )
 
 index = 0
 
+layout = {
+    'xaxis': {'title': 'Date/Time'},
+    'yaxis': {'title': 'Temp in F'},
+    'title': 'XBee Temperature Sensors'
+}
 
 while True:
     
     # Get the list of measurements
-    tempMeasurements = []
-    for node in nodeAddresses:
-        measUrl = urlbase + 'measure/' + node
-        print( 'Measure url = ' + measUrl );
-        temp = urllib2.urlopen( measUrl ).read()
-        tempMeasurements = tempMeasurements + [float(temp)]
-
-    print( 'Measurements: ' + str(tempMeasurements) )
-    curTime = datetime.datetime.now()
+    try:
+        tempMeasurements = []
+        for node in nodeAddresses:
+            measUrl = urlbase + 'measure/' + node
+            print( 'Measure url = ' + measUrl );
+            temp = urllib2.urlopen( measUrl ).read()
+            tempF = float( temp ) * 1.8 + 32.0
+            tempMeasurements = tempMeasurements + [ tempF ]
+    except:
+        pass;
 
     try:
+        print( 'Measurements: ' + str(tempMeasurements) )
+        curTime = datetime.datetime.now()
+
         if len( tempMeasurements ) == len( nodeAddresses ):
             trace = 0
             for curTemp in tempMeasurements:
                 if index == 0:
                     print( 'append index ' + str(index) + ' temp ' + str(curTemp) )
                     py.plot( [ curTime ], [ curTemp ], 
-                             filename='temp_multitrace', fileopt='append' )
+                             filename='temp_multitrace', fileopt='append', layout=layout )
                 else:
                     print( 'extend index ' + str(index) + ' temp ' + 
                            str(curTemp) + ' trace ' + str(trace) )

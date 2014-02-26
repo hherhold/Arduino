@@ -12,14 +12,12 @@
  */
 
 #ifdef ARDUINO_AVR_YUN
-
 #endif
 
 #ifdef ARDUINO_AVR_MEGA2560
-#define FOO 2
 #endif
 
-#undef USE_DEBUG_CONSOLE
+#define USE_DEBUG_CONSOLE
 
 #ifdef USE_DEBUG_CONSOLE
 #include <Console.h>
@@ -306,7 +304,7 @@ void handleNetworkDiscoveryResponse( uint8_t* data, int length )
 
 bool ndSent = false;
 
-unsigned int samplePeriodInSeconds = 10;
+unsigned int samplePeriodInSeconds = 60;
 unsigned long delayTimerMillis = 0;
 
 void sendNetworkDiscoveryRequest( )
@@ -434,45 +432,10 @@ void sendMeasurementToDatabase( String radio_mac, int measurementType, float val
     command += "&value=";
     command += value;
     command += "\"";
-
-//    Console.println( command );
+#ifdef USE_DEBUG_CONSOLE
+    Console.println( command );
+#endif
     client.runShellCommand( command );
-
-#if 0
-    client.begin( "curl" );
-    client.addParameter( "-A \"Mozilla\"" );
-
-    String url = "\"http://www.fafoh.com/dbinsert.php?radio_mac=";
-    url += radio_mac;
-    url += "&type=";
-    url += measurementType;
-    url += "&value=";
-    url += value;
-    url += "\"";
-
-    Console.println( url );
-
-    client.run();
-#endif
-
-#if 0
-    HttpClient client;
-    String url = "-A \"Mozilla\" \"http://www.fafoh.com/dbinsert.php?radio_mac=";
-    url += radio_mac;
-    url += "&type=";
-    url += measurementType;
-    url += "&value=";
-    url += value;
-    url += "\"";
-
-    // The result of the get isn't used. Data is being sent to the server to be
-    // logged and any response from the server is ignored.
-    client.get( url );
-
-    Console.println( url );
-
-    //    Console.println( "SENDING TO DB DISBALED FOR NOW!" );
-#endif
 }
 
 // void processServerRequest( YunClient client )

@@ -89,10 +89,10 @@ void MPL115A1_readCoefficients( )
     MPL115A1_coeff_b2 *= ( b2bits & 0b1000000000000000 ) ? -1.0 : 1.0;
     Serial.print( "b2 = " ); Serial.println( MPL115A1_coeff_b2, 10 );
 
-    // c12
+    // c12 is the oddball here in that it's 14 bits, with the 2 LSB set to zero.
     uint8_t C12_MSB = MPL115A1_read( MPL115A1_C12_MSB_RD );
     uint8_t C12_LSB = MPL115A1_read( MPL115A1_C12_LSB_RD );
-    uint32_t c12bits = ( C12_MSB << 8 ) | ( C12_LSB );
+    uint32_t c12bits = ( ( C12_MSB << 8 ) | ( C12_LSB ) ) >> 2;
     MPL115A1_coeff_c12 = 
         ( ( c12bits & 0b01111111111111 ) / ( float )( 0b10000000000000000000000 ) );
     MPL115A1_coeff_c12 *= ( c12bits & 0b10000000000000 ) ? -1.0 : 1.0;
@@ -113,7 +113,6 @@ void setup()
     SPI.begin();
 
     delay( 1000 );
-
 
     MPL115A1_readCoefficients( );
 

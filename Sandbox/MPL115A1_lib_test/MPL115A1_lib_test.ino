@@ -7,6 +7,7 @@
 
 MPL115A1 mpl( MPL115A1_SELECT_PIN, MPL115A1_ENABLE_PIN );
 
+
 void setup()
 {
     // initialize serial i/o
@@ -38,8 +39,11 @@ void loop()
     delay(20);  // give the chip a few ms to wake up
     
     float pressure_pKa = mpl.calculatePressurekPa();
+    float tempC = mpl.calculateTemperatureC();
 
-    Serial.println( pressure_pKa, 4 );
+    Serial.print( pressure_pKa, 4 );
+    Serial.print( "  " );
+    Serial.println( tempC, 2 );
 
     delay( 2000 );
 

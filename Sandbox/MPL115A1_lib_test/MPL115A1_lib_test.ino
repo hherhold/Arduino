@@ -5,7 +5,7 @@
 #define MPL115A1_ENABLE_PIN 9
 #define MPL115A1_SELECT_PIN 7
 
-MPL115A1 mpl( MPL115A1_SELECT_PIN, MPL115A1_ENABLE_PIN );
+MPL115A1 mpl;
 
 
 void setup()
@@ -15,6 +15,7 @@ void setup()
     
     // initialize SPI interface
     SPI.begin();
+
     
     // these are the defaults
     //SPI.setDataMode(SPI_MODE0);
@@ -27,23 +28,24 @@ void setup()
     
     // sleep the MPL115A1
     digitalWrite(MPL115A1_ENABLE_PIN, LOW);
-    
-    // set the chip select inactive, select signal is CS LOW
-    digitalWrite(MPL115A1_SELECT_PIN, HIGH);
-}
 
-void loop()
-{
+    delay( 1000 );
+    
     // wake the MPL115A1
     digitalWrite(MPL115A1_ENABLE_PIN, HIGH);
     delay(20);  // give the chip a few ms to wake up
     
-    float pressure_pKa = mpl.calculatePressurekPa();
-    float tempC = mpl.calculateTemperatureC();
+    // set the chip select inactive, select signal is CS LOW
+    digitalWrite(MPL115A1_SELECT_PIN, HIGH);
 
-    Serial.print( pressure_pKa, 4 );
-    Serial.print( "  " );
-    Serial.println( tempC, 2 );
+    mpl.init( MPL115A1_SELECT_PIN, MPL115A1_ENABLE_PIN );
+}
+
+void loop()
+{
+    float pressure_pKa = mpl.calcPressure_kPa();
+
+    Serial.println( pressure_pKa, 4 );
 
     delay( 2000 );
 

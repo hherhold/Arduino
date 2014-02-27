@@ -3,219 +3,175 @@
 
 #include "SPI.h"
 
-
-
-MPL115A1::MPL115A1( int selectPin,
-                    int shutdownPin )
+MPL115A1::MPL115A1( )
 {
+
+}
+
+void MPL115A1::init( int selectPin,
+                     int shutdownPin )
+{
+    SPI.begin();
+
     m_selectPin = selectPin;
     m_shutdownPin = shutdownPin;
+
+    MPL115A1_coeff_a0  = 0.0;
+    MPL115A1_coeff_b1  = 0.0;
+    MPL115A1_coeff_b2  = 0.0;
+    MPL115A1_coeff_c12 = 0.0;
+
+    readCoefficients( );
 }
 
-
-unsigned int MPL115A1::readRegister(byte thisRegister) 
+uint8_t MPL115A1::read( uint8_t addr )
 {
-    byte result = 0;
-    
-    // select the MPL115A1
-    digitalWrite(m_selectPin, LOW);
-    
-    // send the request
-    SPI.transfer(thisRegister | MPL115A1_READ_MASK);
-    result = SPI.transfer(0x00);
-    
-    // deselect the MPL115A1
-    digitalWrite(m_selectPin, HIGH);
-    
-    return result;  
+    // LSB is don't care, and address is shifted 1 high.
+    // MSB is 1 for read, 0 for write.
+    addr <<= 1;
+    addr |= 0x80;
+
+    digitalWrite( m_selectPin, LOW );
+    SPI.transfer( addr );
+    uint8_t retVal = SPI.transfer( 0x00 ) & 0xFF;
+    digitalWrite( m_selectPin, HIGH );
+    return retVal;
 }
 
-
-void MPL115A1::writeRegister(byte thisRegister, byte thisValue) 
+uint8_t MPL115A1::write( uint8_t addr, uint8_t value )
 {
-    
-    // select the MPL115A1
-    digitalWrite(m_selectPin, LOW);
-    
-    // send the request
-    SPI.transfer(thisRegister & MPL115A1_WRITE_MASK);
-    SPI.transfer(thisValue);
-    
-    // deselect the MPL115A1
-    digitalWrite(m_selectPin, HIGH);
+    // LSB is don't care, and address is shifted 1 high.
+    // MSB is 1 for read, 0 for write.
+    addr <<= 1;
+
+    digitalWrite( m_selectPin, LOW );
+    SPI.transfer( addr );
+    uint8_t retVal = ( SPI.transfer( value ) ) & 0xFF;
+    digitalWrite( m_selectPin, HIGH );
+    return retVal;
 }
 
-
-float MPL115A1::calculateTemperatureC() 
+void MPL115A1::readCoefficients( )
 {
-    unsigned int uiTadc;
-    unsigned char uiTH, uiTL;
-    
-    unsigned int temperature_counts = 0;
-    
-    writeRegister(0x22, 0x00);  // Start temperature conversion
-    delay(2);                   // Max wait time is 0.7ms, typ 0.6ms
-    
-    // Read pressure
-    uiTH = readRegister(TEMPH);
-    uiTL = readRegister(TEMPL);
-    
-    uiTadc = (unsigned int) uiTH << 8;
-    uiTadc += (unsigned int) uiTL & 0x00FF;
-    
-    // Temperature is a 10bit value
-    uiTadc = uiTadc >> 6;
-    
-    // -5.35 counts per Â°C, 472 counts is 25Â°C
-    return 25 + (uiTadc - 472) / -5.35;
-}
-
-
-
-
-float MPL115A1::calculatePressurekPa() 
-{
-    // See Freescale document AN3785 for detailed explanation
-    // of this implementation.
-    
-    signed char sia0MSB, sia0LSB;
-    signed char sib1MSB, sib1LSB;
-    signed char sib2MSB, sib2LSB;
-    signed char sic12MSB, sic12LSB;
-    signed char sic11MSB, sic11LSB;
-    signed char sic22MSB, sic22LSB;
-    signed int sia0, sib1, sib2, sic12, sic11, sic22, siPcomp;
-    float decPcomp;
-    signed long lt1, lt2, lt3, si_c11x1, si_a11, si_c12x2;
-    signed long si_a1, si_c22x2, si_a2, si_a1x1, si_y1, si_a2x2;
-    unsigned int uiPadc, uiTadc;
-    unsigned char uiPH, uiPL, uiTH, uiTL;
-    
-    writeRegister(0x24, 0x00);      // Start Both Conversions
-    //writeRegister(0x20, 0x00);    // Start Pressure Conversion
-    //writeRegister(0x22, 0x00);    // Start temperature conversion
-    delay(2);                       // Max wait time is 1ms, typ 0.8ms
-    
-    // Read pressure
-    uiPH = readRegister(PRESH);
-    uiPL = readRegister(PRESL);
-    uiTH = readRegister(TEMPH);
-    uiTL = readRegister(TEMPL);
-    
-    uiPadc = (unsigned int) uiPH << 8;
-    uiPadc += (unsigned int) uiPL & 0x00FF;
-    uiTadc = (unsigned int) uiTH << 8;
-    uiTadc += (unsigned int) uiTL & 0x00FF;
-    
-    // Placing Coefficients into 16-bit Variables
     // a0
-    sia0MSB = readRegister(A0MSB);
-    sia0LSB = readRegister(A0LSB);
-    sia0 = (signed int) sia0MSB << 8;
-    sia0 += (signed int) sia0LSB & 0x00FF;
-    
+    uint8_t A0_MSB = read( MPL115A1_A0_MSB_RD );
+    uint8_t A0_LSB = read( MPL115A1_A0_LSB_RD );
+    uint32_t a0bits = ( A0_MSB << 8 ) | ( A0_LSB );
+
+    MPL115A1_coeff_a0 = ( ( a0bits & 0b0111111111111000 ) >> 3 ) +
+        ( ( float )( a0bits & 0b0111 ) / ( float )( 0b1000 ) );
+//    MPL115A1_coeff_a0 *=  ( a0bits & 0b1000000000000000 ) ? -1.0 : 1.0;
+//    Serial.print( "a0 = " ); Serial.println( MPL115A1_coeff_a0, 10 );
+
     // b1
-    sib1MSB = readRegister(B1MSB);
-    sib1LSB = readRegister(B1LSB);
-    sib1 = (signed int) sib1MSB << 8;
-    sib1 += (signed int) sib1LSB & 0x00FF;
-    
+    //      111 1 11
+    //      543 2 1098 7654 3210
+    // b1 = SII.F FFFF FFFF FFFF
+    uint8_t B1_MSB = read( MPL115A1_B1_MSB_RD );
+    uint8_t B1_LSB = read( MPL115A1_B1_LSB_RD );
+#if 0
+    Serial.print( "B1 msb = 0x" ); Serial.println( B1_MSB, HEX );
+    Serial.print( "B1 Lsb = 0x" ); Serial.println( B1_LSB, HEX );
+    uint32_t b1bits = ( B1_MSB << 8 ) | ( B1_LSB );
+    Serial.print( "B1 bits = 0x" ); Serial.println( b1bits, HEX );
+    MPL115A1_coeff_b1 = ( ( ( b1bits & 0b0110000000000000 ) >> 13 )  + 
+                          ( float )( b1bits & 0b0001111111111111 ) ) 
+        / ( float )( 0b10000000000000 );
+//    MPL115A1_coeff_b1 -= 3; // Two's complement notation
+//    Serial.print( "b1 = " ); Serial.println( MPL115A1_coeff_b1, 10 );
+    MPL115A1_coeff_b1 *= ( b1bits & 0b1000000000000000 ) ? -1.0 : 1.0;
+#endif
+    // From sparkfun forums
+    MPL115A1_coeff_b1 = ( ( ( ( B1_MSB & 0x1F ) * 0x100 ) + B1_LSB ) / 8192.0 ) - 3;
+//    Serial.print( "b1 = " ); Serial.println( MPL115A1_coeff_b1, 10 );
+
     // b2
-    sib2MSB = readRegister(B2MSB);
-    sib2LSB = readRegister(B2LSB);
-    sib2 = (signed int) sib2MSB << 8;
-    sib2 += (signed int) sib2LSB & 0x00FF;
-    
-    // c12
-    sic12MSB = readRegister(C12MSB);
-    sic12LSB = readRegister(C12LSB);
-    sic12 = (signed int) sic12MSB << 8;
-    sic12 += (signed int) sic12LSB & 0x00FF;
-    
-    // c11
-    sic11MSB = readRegister(C11MSB);
-    sic11LSB = readRegister(C11LSB);
-    sic11 = (signed int) sic11MSB << 8;
-    sic11 += (signed int) sic11LSB & 0x00FF;
-    
-    // c22
-    sic22MSB = readRegister(C22MSB);
-    sic22LSB = readRegister(C22LSB);
-    sic22 = (signed int) sic22MSB << 8;
-    sic22 += (signed int) sic22LSB & 0x00FF;
-    
-    // Coefficient 9 equation compensation
-    uiPadc = uiPadc >> 6;
-    uiTadc = uiTadc >> 6;
-    
-    // Step 1 c11x1 = c11 * Padc
-    lt1 = (signed long) sic11;
-    lt2 = (signed long) uiPadc;
-    lt3 = lt1*lt2;
-    si_c11x1 = (signed long) lt3;
-    
-    // Step 2 a11 = b1 + c11x1
-    lt1 = ((signed long)sib1)<<14;
-    lt2 = (signed long) si_c11x1;
-    lt3 = lt1 + lt2;
-    si_a11 = (signed long)(lt3>>14);
-    
-    // Step 3 c12x2 = c12 * Tadc
-    lt1 = (signed long) sic12;
-    lt2 = (signed long) uiTadc;
-    lt3 = lt1*lt2;
-    si_c12x2 = (signed long)lt3;
-    
-    // Step 4 a1 = a11 + c12x2
-    lt1 = ((signed long)si_a11<<11);
-    lt2 = (signed long)si_c12x2;
-    lt3 = lt1 + lt2;
-    si_a1 = (signed long) lt3>>11;
-    
-    // Step 5 c22x2 = c22*Tadc
-    lt1 = (signed long)sic22;
-    lt2 = (signed long)uiTadc;
-    lt3 = lt1 * lt2;
-    si_c22x2 = (signed long)(lt3);
-    
-    // Step 6 a2 = b2 + c22x2
-    lt1 = ((signed long)sib2<<15);
-    lt2 = ((signed long)si_c22x2>1);
-    lt3 = lt1+lt2;
-    si_a2 = ((signed long)lt3>>16);
-    
-    // Step 7 a1x1 = a1 * Padc
-    lt1 = (signed long)si_a1;
-    lt2 = (signed long)uiPadc;
-    lt3 = lt1*lt2;
-    si_a1x1 = (signed long)(lt3);
-    
-    // Step 8 y1 = a0 + a1x1
-    lt1 = ((signed long)sia0<<10);
-    lt2 = (signed long)si_a1x1;
-    lt3 = lt1+lt2;
-    si_y1 = ((signed long)lt3>>10);
-    
-    // Step 9 a2x2 = a2 * Tadc
-    lt1 = (signed long)si_a2;
-    lt2 = (signed long)uiTadc;
-    lt3 = lt1*lt2;
-    si_a2x2 = (signed long)(lt3);
-    
-    // Step 10 pComp = y1 + a2x2
-    lt1 = ((signed long)si_y1<<10);
-    lt2 = (signed long)si_a2x2;
-    lt3 = lt1+lt2;
-    
-    // Fixed point result with rounding
-    //siPcomp = ((signed int)lt3>>13);
-    siPcomp = lt3/8192;
-    
-    // decPcomp is defined as a floating point number
-    // Conversion to decimal value from 1023 ADC count value
-    // ADC counts are 0 to 1023, pressure is 50 to 115kPa respectively
-    decPcomp = ((65.0/1023.0)*siPcomp)+50;
-    
-    return decPcomp;
+    uint8_t B2_MSB = read( MPL115A1_B2_MSB_RD );
+    uint8_t B2_LSB = read( MPL115A1_B2_LSB_RD );
+#if 0
+    uint32_t b2bits = ( B2_MSB << 8 ) | ( B2_LSB );
+    MPL115A1_coeff_b2 = ( ( b2bits & 0b0100000000000000 ) >> 14 ) +
+        ( ( float )( b2bits & 0b001111111111111 ) / ( float )( 0b0100000000000000 ) );
+    MPL115A1_coeff_b2 *= ( b2bits & 0b1000000000000000 ) ? -1.0 : 1.0;
+#endif
+    // From sparkfun forums
+    MPL115A1_coeff_b2 = ( ( ( ( B2_MSB - 0x80 ) << 8 ) + B2_LSB ) / 16384.0 ) - 2;
+//    Serial.print( "b2 = " ); Serial.println( MPL115A1_coeff_b2, 10 );
+
+    // c12 is the oddball here in that it's 14 bits, with the 2 LSB set to zero.
+    uint8_t C12_MSB = read( MPL115A1_C12_MSB_RD );
+    uint8_t C12_LSB = read( MPL115A1_C12_LSB_RD );
+#if 0
+    uint32_t c12bits = ( ( C12_MSB << 8 ) | ( C12_LSB ) ) >> 2;
+    MPL115A1_coeff_c12 = 
+        ( ( c12bits & 0b01111111111111 ) / ( float )( 0b10000000000000000000000 ) );
+    MPL115A1_coeff_c12 *= ( c12bits & 0b10000000000000 ) ? -1.0 : 1.0;
+#endif
+    // From sparkfun forums
+    MPL115A1_coeff_c12 = ( ( ( C12_MSB * 0x100 ) + C12_LSB ) / 16777216.0 );
+//    Serial.print( "c12 = " ); Serial.println( MPL115A1_coeff_c12, 10 );
+}
+
+uint32_t MPL115A1::getTemp_counts( )
+{
+    // 10 bit value transferred in MSB of 16 bits.
+    uint8_t TEMP_MSB = read( MPL115A1_TEMP_MSB_RD );
+    uint8_t TEMP_LSB = read( MPL115A1_TEMP_LSB_RD );
+//    Serial.print( "TEMP_MSB = 0x" ); Serial.println( TEMP_MSB, HEX );
+//    Serial.print( "TEMP_LSB = 0x" ); Serial.println( TEMP_LSB, HEX );
+
+    uint32_t tempBits = ( ( TEMP_MSB << 8 ) | ( TEMP_LSB ) ) & 0xFFFF;
+    tempBits >>= 6;
+//    Serial.print( "TEMP = 0x" ); Serial.println( tempBits, HEX );
+
+    return tempBits;
+}
+
+uint32_t MPL115A1::getPress_counts( )
+{
+    // 10 bit value transferred in MSB of 16 bits.
+    uint8_t PRESS_MSB = read( MPL115A1_PRESS_MSB_RD );
+    uint8_t PRESS_LSB = read( MPL115A1_PRESS_LSB_RD );
+    uint32_t pressBits = ( ( PRESS_MSB << 8 ) | ( PRESS_LSB ) ) & 0xFFFF;
+    pressBits >>= 6;
+    return pressBits;
+}
+
+
+float MPL115A1::calcPressure_kPa( )
+{
+    write( MPL115A1_CONVERT, 0x00 );
+    delay( 5 );
+
+    uint32_t Tadc = getTemp_counts();
+    uint32_t Padc = getPress_counts();
+
+//    Serial.print( "Tadc = " ); Serial.println( Tadc );
+//    Serial.print( "Padc = " ); Serial.println( Padc );
+
+#if 0
+    float c12x2 = MPL115A1_coeff_c12 * ( float )Tadc;
+    Serial.print( "c12x2 = " ); Serial.println( c12x2, 8 );
+    float a1 = MPL115A1_coeff_b1 + c12x2;
+    Serial.print( "a1 = " ); Serial.println( a1, 8 );
+    float a1x1 = a1 * ( float )Padc;
+    Serial.print( "a1x1 = " ); Serial.println( a1x1, 8 );
+    float y1 = MPL115A1_coeff_a0 + a1x1;
+    Serial.print( "y1 = " ); Serial.println( y1, 8 );
+    float a2x2 = MPL115A1_coeff_b2 * ( float )Tadc;
+    Serial.print( "a2x2 = " ); Serial.println( a2x2, 8 );
+    float Pcomp = y1 + a2x2;
+#endif
+
+    float Pcomp = 
+        MPL115A1_coeff_a0 +
+        ( MPL115A1_coeff_b1 + ( MPL115A1_coeff_c12 * ( float )( Tadc ))) * Padc +
+        MPL115A1_coeff_b2 * ( float )( Tadc );
+
+//    Serial.print( "Pcomp = " ); Serial.println( Pcomp, 10 );
+
+    float press_kPa = Pcomp * ( ( 115.0 - 50.0 ) / 1023.0 ) + 50.0;
+
+    return press_kPa;
 }
 

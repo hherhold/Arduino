@@ -1,82 +1,47 @@
 //
 // MPL115A1 Arduino Library.
 //
-// Borrowed heavily (and I mean HEAVILY) from test code by J. McConnel and J. Lindblom.
-//
-// Their headers included below.
-//
-
-/*
- MPL115A1 SPI Digital Barometer Test Code
- Created on: September 30, 2010
-       By: Jeremiah McConnell - miah at miah.com
- Portions: Jim Lindblom - jim at sparkfun.com
- 
- This is a simple test program for the MPL115A1 Pressure Sensor (SPI version).
- 
- Hardware: ATmega168, ATmega328
- Powered at 3.3V or 5V, running at 8MHz or 16MHz.
- 
- MPL115A1 Breakout ------------- Arduino
- -----------------               -------
-         SDN ------------------- D9
-         CSN ------------------- D10
-         SDO ------------------- D12 *
-         SDI ------------------- D11 *
-         SCK ------------------- D13 *
-         GND ------------------- GND
-         VDD ------------------- VCC +
- 
-         * These pins physically connect to the SPI device so you can't change them
-         + 5V board use 5V VDD, 3.3V board use 3.3V VDD
- 
- License: CCAv3.0 Attribution-ShareAlike (http://creativecommons.org/licenses/by-sa/3.0/)
- You're free to use this code for any venture, but I'd love to hear about what you do with it,
- and any awesome changes you make to it. Attribution is greatly appreciated.
- */
 
 #include <Arduino.h>
 
-// Pin definitions
-#define MPL115A1_ENABLE_PIN 9
-
-// Masks for MPL115A1 SPI i/o
-#define MPL115A1_READ_MASK  0x80
-#define MPL115A1_WRITE_MASK 0x7F 
-
-// MPL115A1 register address map
-#define PRESH   0x00    // 80
-#define PRESL   0x02    // 82
-#define TEMPH   0x04    // 84
-#define TEMPL   0x06    // 86
-
-#define A0MSB   0x08    // 88
-#define A0LSB   0x0A    // 8A
-#define B1MSB   0x0C    // 8C
-#define B1LSB   0x0E    // 8E
-#define B2MSB   0x10    // 90
-#define B2LSB   0x12    // 92
-#define C12MSB  0x14    // 94
-#define C12LSB  0x16    // 96
-#define C11MSB  0x18    // 98
-#define C11LSB  0x1A    // 9A
-#define C22MSB  0x1C    // 9C
-#define C22LSB  0x1E    // 9E
-
+#define MPL115A1_PRESS_MSB_RD        0x00
+#define MPL115A1_PRESS_LSB_RD        0x01
+#define MPL115A1_TEMP_MSB_RD         0x02
+#define MPL115A1_TEMP_LSB_RD         0x03
+#define MPL115A1_A0_MSB_RD           0x04
+#define MPL115A1_A0_LSB_RD           0x05
+#define MPL115A1_B1_MSB_RD           0x06
+#define MPL115A1_B1_LSB_RD           0x07
+#define MPL115A1_B2_MSB_RD           0x08
+#define MPL115A1_B2_LSB_RD           0x09
+#define MPL115A1_C12_MSB_RD          0x0A
+#define MPL115A1_C12_LSB_RD          0x0B
+#define MPL115A1_CONVERT             0x12
 
 class MPL115A1
 {
 public:
 
-    MPL115A1( int selectPin,
-              int shutdownPin );
+    MPL115A1( );
 
-    void writeRegister(byte thisRegister, byte thisValue);
-    unsigned int readRegister(byte thisRegister);
+    void init( int selectPin,
+               int shutdownPin );
 
-    float calculateTemperatureC();
-    float calculatePressurekPa();
+    uint8_t read( uint8_t addr );
+    uint8_t write( uint8_t addr, uint8_t value );
+
+    uint32_t getTemp_counts( );
+    uint32_t getPress_counts( );
+
+    float calcPressure_kPa( );
+
+    void readCoefficients( );
 
     int m_selectPin;
     int m_shutdownPin;
+
+    float MPL115A1_coeff_a0;
+    float MPL115A1_coeff_b1;
+    float MPL115A1_coeff_b2;
+    float MPL115A1_coeff_c12;
 };

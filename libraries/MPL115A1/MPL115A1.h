@@ -2,6 +2,12 @@
 // MPL115A1 Arduino Library.
 //
 
+// Pins:
+// SCK -> D13
+// SDI -> D11 (MOSI)
+// SDO -> D12 (MISO)
+// CS  -> D7
+
 #include <Arduino.h>
 
 #define MPL115A1_PRESS_MSB_RD        0x00

@@ -17,6 +17,7 @@
 #include <SPI.h>
 #include <BMA180.h>
 
+
 #define BMA180_INT_PIN  2
 #define BMA180_CS_PIN   7
 
@@ -139,7 +140,7 @@ boolean getAccelData( int* x, int* y, int* z, int* temp )
 
 void setup()
 {
-  Serial.begin( 19200 );
+  Serial.begin( 9600 );
   
 // Don't seem to need these?? Odd...  
 //  SPI.setClockDivider( SPI_CLOCK_DIV2 );
@@ -161,7 +162,8 @@ void setup()
   // Update register cache.
   readFromBMA180( 0x00, 0x60, BMA180RegisterCache );  
   dumpRegisterCacheToSerial( );
-  
+#if 0 
+ 
   // Self test.
   runBMA180SelfTest( );
   
@@ -199,6 +201,7 @@ void setup()
 
   readFromBMA180( 0x00, 0x60, BMA180RegisterCache );  
   dumpRegisterCacheToSerial( );
+#endif
   
 }
 

@@ -3,32 +3,55 @@
 //
 
 #include <Arduino.h> // capital A so it is error prone on case-sensitive filesystems
+#include <BMA180.h>
 
+// Include both. Decision on which mode to use is made at runtime. This uses up
+// space, but not that much.
+#include <SPI.h>
 #include <Wire.h>
-#include <avr/pgmspace.h>
-#include "BMA180.h"
 
+// Comm mode defaults to SPI.
+BMA180_CommMode BMA180::commMode = BMA180_USE_SPI;
 
 static void writeToBMA180( byte address, byte value )
 {
-  Wire.beginTransmission( BMA180_DEVICE_ADDR );
-  Wire.write( address );
-  Wire.write( value );
-  Wire.endTransmission( );
+    if ( BMA180::commMode == BMA180_USE_I2C )
+    {
+#if 0
+        Wire.beginTransmission( BMA180_DEVICE_ADDR );
+        Wire.write( address );
+        Wire.write( value );
+        Wire.endTransmission( );
+#endif
+    }
+    else
+    {
+
+    }
 }
 
 static int readFromBMA180( byte startAddr, byte numBytesToRead, byte* buf )
 {
-  Wire.beginTransmission( BMA180_DEVICE_ADDR );
-  Wire.write( startAddr );
-  Wire.endTransmission( );
+    if ( BMA180::commMode == BMA180_USE_I2C )
+    {
+#if 0
+        Wire.beginTransmission( BMA180_DEVICE_ADDR );
+        Wire.write( startAddr );
+        Wire.endTransmission( );
 
-  Wire.requestFrom( BMA180_DEVICE_ADDR, numBytesToRead );
-  int numBytesAvail = Wire.available( );
-  for ( int i = 0; i < numBytesAvail; i++ ) {
-    *( buf + i ) = Wire.read( );
-  }
-  return numBytesAvail;
+        Wire.requestFrom( BMA180_DEVICE_ADDR, numBytesToRead );
+        int numBytesAvail = Wire.available( );
+        for ( int i = 0; i < numBytesAvail; i++ ) {
+            *( buf + i ) = Wire.read( );
+        }
+        return numBytesAvail;
+#endif
+        return 0;
+    }
+    else
+    {
+        return 0;
+    }
 }
 
 void BMA180::setRange( byte rangeBits )

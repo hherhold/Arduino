@@ -2,8 +2,6 @@
 // BMA180.h
 //
 
-#include <Arduino.h>
-
 //
 // #defines and such for dealing with the Bosch BMA180 3-axis accelerometer.
 //
@@ -43,6 +41,7 @@ THE SOFTWARE.
 */
 
 // And all the disclaimers apply to any and all subsequent revisions.
+
 
 
 // i2c device address. This is actually changeable, but this is the default.
@@ -119,6 +118,12 @@ THE SOFTWARE.
 // Class definition for Arduino library use.
 
 
+enum BMA180_CommMode
+{
+    BMA180_USE_SPI,
+    BMA180_USE_I2C
+};
+
 typedef struct AccelDataPacket
 {
   int x;
@@ -137,6 +142,8 @@ class BMA180
   static void getAccelerationData( AccelDataPacket* accelData );
 
   static void getRawAccelRegs( byte* rawAccelRegs );
+
+  static BMA180_CommMode commMode;
 };
 
 

@@ -132,7 +132,16 @@ void loop()
         DEBUG_OUT.println( "Got an xbee packet!" );
 
         DEBUG_OUT.print( "API id = 0x" );
-        DEBUG_OUT.println( xbee.getResponse().getApiId() );
+        DEBUG_OUT.println( xbee.getResponse().getApiId(), HEX );
+
+        if ( xbee.getResponse().getApiId() == ZB_RX_RESPONSE )
+        {
+            ZBRxResponse rxResponse;
+            xbee.getResponse().getZBRxResponse( rxResponse );
+
+            DEBUG_OUT.print( "Data length = " );
+            DEBUG_OUT.println( rxResponse.getDataLength() );
+        }
     }
 
     DEBUG_OUT.print( "." );

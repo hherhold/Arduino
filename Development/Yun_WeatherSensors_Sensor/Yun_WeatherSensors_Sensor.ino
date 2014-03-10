@@ -7,6 +7,13 @@
 #include <Bridge.h>
 #endif
 
+// Common structures for XBee comm protocol between sensor and base.
+// This really doesn't belong in a "library" but the libraries directory
+// is kinda the most convenient place for dumping common code.
+// (Even though it's only common between the base and sensor in this
+// project.)
+#include <Yun_WeatherSensors.h>
+
 #include <SoftwareSerial.h>
 #include <XBee.h>
 #include <SPI.h>
@@ -36,7 +43,6 @@ XBee xbee = XBee();
 #define SAMPLE_PERIOD_MILLISECONDS 2000
 
 static unsigned long lastSampleMillis = 0;
-
 
 void setup()
 {
@@ -78,7 +84,6 @@ void setup()
 
     DEBUG_OUT.println( "Start!" );
     lastSampleMillis = millis();
-
 }
 
 
@@ -86,48 +91,48 @@ void loop()
 {
     if ( ( millis() - lastSampleMillis ) > SAMPLE_PERIOD_MILLISECONDS )
     {
-
         digitalWrite(MPL115A1_ENABLE_PIN, HIGH);
         delay(20);  // give the chip a few ms to wake up
     
         float pressure_pKa = mpl.calcPressure_kPa();
 
-        Serial.print( "MPL115A1: Press (kPa) = " );
-        Serial.print( pressure_pKa, 4 );
+        DEBUG_OUT.print( "MPL115A1: Press (kPa) = " );
+        DEBUG_OUT.print( pressure_pKa, 4 );
 
         // READ DATA
-        Serial.print("\tDHT22 ");
+        DEBUG_OUT.print("\tDHT22 ");
         int chk = DHT.read22(DHT22_PIN);
         switch (chk)
         {
         case DHTLIB_OK:  
-            Serial.print("read OK,\t"); 
+            DEBUG_OUT.print("read OK,\t"); 
             break;
         case DHTLIB_ERROR_CHECKSUM: 
-            Serial.print("Checksum error,\t"); 
+            DEBUG_OUT.print("Checksum error,\t"); 
             break;
         case DHTLIB_ERROR_TIMEOUT: 
-            Serial.print("Time out error,\t"); 
+            DEBUG_OUT.print("Time out error,\t"); 
             break;
         default: 
-            Serial.print("Unknown error,\t"); 
+            DEBUG_OUT.print("Unknown error,\t"); 
             break;
         }
         // DISPLAY DATA
-        Serial.print( " humidity = " );
-        Serial.print(DHT.humidity, 1);
-        Serial.print(",\tTemp c = ");
-        Serial.println(DHT.temperature, 1);
+        DEBUG_OUT.print( " humidity = " );
+        DEBUG_OUT.print(DHT.humidity, 1);
+        DEBUG_OUT.print(",\tTemp c = ");
+        DEBUG_OUT.println(DHT.temperature, 1);
 
         lastSampleMillis = millis();
     }
 
-
     xbee.readPacket();
     if ( xbee.getResponse().isAvailable() )
     {
-
         DEBUG_OUT.println( "Got an xbee packet!" );
+
+        DEBUG_OUT.print( "API id = 0x" );
+        DEBUG_OUT.println( xbee.getResponse().getApiId() );
     }
 
     DEBUG_OUT.print( "." );

@@ -87,6 +87,14 @@ void setup()
 }
 
 
+bool lastPressReadOK = false;
+float currentPressurekPa = 0.0;
+
+
+bool lastHumidityReadOK = false;
+float currentTempC = 0.0;
+float currentHumidityPercent = 0.0;
+
 void loop()
 {
     if ( ( millis() - lastSampleMillis ) > SAMPLE_PERIOD_MILLISECONDS )
@@ -94,10 +102,11 @@ void loop()
         digitalWrite(MPL115A1_ENABLE_PIN, HIGH);
         delay(20);  // give the chip a few ms to wake up
     
-        float pressure_pKa = mpl.calcPressure_kPa();
+        currentPressurekPa = mpl.calcPressure_kPa();
+        lastPressReadOK = true;
 
         DEBUG_OUT.print( "MPL115A1: Press (kPa) = " );
-        DEBUG_OUT.print( pressure_pKa, 4 );
+        DEBUG_OUT.print( currentPressurekPa, 4 );
 
         // READ DATA
         DEBUG_OUT.print("\tDHT22 ");
@@ -106,15 +115,19 @@ void loop()
         {
         case DHTLIB_OK:  
             DEBUG_OUT.print("read OK,\t"); 
+            lastHumidityReadOK = true;
             break;
         case DHTLIB_ERROR_CHECKSUM: 
             DEBUG_OUT.print("Checksum error,\t"); 
+            lastHumidityReadOK = false;
             break;
         case DHTLIB_ERROR_TIMEOUT: 
             DEBUG_OUT.print("Time out error,\t"); 
+            lastHumidityReadOK = false;
             break;
         default: 
             DEBUG_OUT.print("Unknown error,\t"); 
+            lastHumidityReadOK = false;
             break;
         }
         // DISPLAY DATA
@@ -122,6 +135,9 @@ void loop()
         DEBUG_OUT.print(DHT.humidity, 1);
         DEBUG_OUT.print(",\tTemp c = ");
         DEBUG_OUT.println(DHT.temperature, 1);
+
+        currentTempC = DHT.temperature;
+        currentHumidityPercent = DHT.humidity;
 
         lastSampleMillis = millis();
     }
@@ -139,11 +155,39 @@ void loop()
             ZBRxResponse rxResponse;
             xbee.getResponse().getZBRxResponse( rxResponse );
 
-            DEBUG_OUT.print( "Data length = " );
-            DEBUG_OUT.println( rxResponse.getDataLength() );
+            // Command structure
+            // "S" = sense
+
+            if ( rxResponse.getData( 0 ) == 'S' )
+            {
+                // Sense. Return the last sensed data.
+                //
+                // numMeasurements::type:value:multiplier:status::...
+                //
+                // type = P|T|H for Pressure, Temp, Humidity
+                // value = float value
+                // multiplier = float to int conversion multiple
+                // Status = 1 for ok, 0 for not ok
+
+                String responseString = "3::P:";
+                responseString += String( ( long )( currentPressurekPa * 100000.0 ) );
+                responseString += ":100000:1::";
+
+                responseString += "H:";
+                responseString += String( ( long )( currentHumidityPercent * 100 ) );
+                responseString += ":100:1::";
+
+                responseString += "C:";
+                responseString += String( ( long )( currentTempC * 100 ) );
+                responseString += ":100:1";
+
+                DEBUG_OUT.print( "Resp = " );
+                DEBUG_OUT.println( responseString );
+            }
+                
         }
     }
 
-    DEBUG_OUT.print( "." );
+//    DEBUG_OUT.print( "." );
     delay( 100 );
 }
